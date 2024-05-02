@@ -57,7 +57,7 @@ int main(int argc, char** argv) {
   printw("argc=%d\n", argc);
 
   for(int i = 0; i < dir_files.count; i++) {
-    printw("%s\n", dir_files.items[i]);
+    printw("%s\n", (char*)dir_files.items[i]);
   }
 
   result = ma_decoder_init_file("./stuff/down_with_the_sickness.mp3", NULL, &decoder);
@@ -93,6 +93,10 @@ int main(int argc, char** argv) {
   ma_engine_init(&engine_conf, &engine);
   ma_sound_init_from_file(&engine, "./stuff/down_with_the_sickness.mp3", MA_SOUND_FLAG_DECODE, NULL, NULL, &sound);
   // result = ma_engine_init(&engine_conf, &engine);
+  ma_sound_config sound_config;
+  ma_sound_config_init_2(&engine);
+  printw("lenght=%llu\n", sound_config.rangeEndInPCMFrames);
+  refresh();
   ma_uint64 length = 0;
   if(result != MA_SUCCESS) {
     return result;
@@ -133,10 +137,9 @@ int main(int argc, char** argv) {
       }
     }
     if(ch == 'd') {
-      ma_device_get_master_volume(&device, &volume);
-      printw("volume: %f\n", volume);
-      printw("length: %llu\n", length);
-      refresh();
+      float volume_copy = volume;
+      ma_device_get_master_volume(&device, &volume_copy);
+      printw("volume: %f", volume_copy);
     }
     if(ch == 'r') {
       ma_decoder_seek_to_pcm_frame(&decoder, 0);
@@ -150,6 +153,7 @@ int main(int argc, char** argv) {
       }
     }
     ma_sound_set_volume(&sound, volume);
+    refresh();
   }
 
   ma_device_uninit(&device);
