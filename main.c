@@ -108,49 +108,54 @@ int main(int argc, char** argv) {
   bool muted = false;
   ma_device_set_master_volume(&device, volume);
   while(!not_close) {
-    length = ma_sound_get_length_in_pcm_frames(&sound, &length) / decoder.outputSampleRate;
     int ch = getchar();
-    if(ch == 'v') {
+    switch(ch) {
+    case 'v':
       if(volume >= 1.0f) {
         continue;
       }
       volume += 0.1f;
       ma_device_set_master_volume(&device, volume);
-    }
-    if(ch == 'c') {
+      break;
+    case 'c':
       if(volume <= 0.0f) {
         continue;
       }
       volume -= 0.1f;
       ma_device_set_master_volume(&device, volume);
-    }
-    if(ch == 'q') {
+      break;
+    case 'r':
+      ma_decoder_seek_to_pcm_frame(&decoder, 0);
+      break;
+    case 'q':
       not_close += 1;
       endwin();
+      break;
+    case 'd': {
+      ma_sound_get_length_in_pcm_frames(&sound, &length);
+      length = length / decoder.outputSampleRate;
+      float volume_copy = volume;
+      ma_device_get_master_volume(&device, &volume_copy);
+      printw("length: %llu\n", length);
+      printw("volume: %f\n", volume_copy);
+      break;
     }
-    if(ch == 'p') {
+    case 'p':
       playing = !playing;
       if(!playing) {
         ma_device_stop(&device);
       } else {
         ma_device_start(&device);
       }
-    }
-    if(ch == 'd') {
-      float volume_copy = volume;
-      ma_device_get_master_volume(&device, &volume_copy);
-      printw("volume: %f", volume_copy);
-    }
-    if(ch == 'r') {
-      ma_decoder_seek_to_pcm_frame(&decoder, 0);
-    }
-    if(ch == 'm') {
+      break;
+    case 'm':
       muted = !muted;
       if(muted) {
         ma_device_set_master_volume(&device, volume);
       } else {
         ma_device_set_master_volume(&device, 0);
       }
+      break;
     }
     ma_sound_set_volume(&sound, volume);
     refresh();
