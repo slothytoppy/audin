@@ -16,7 +16,7 @@ int main(int argc, char** argv) {
   nom_cmd_append_many(&cmd, 8, "gcc", "-g", "-lncurses", "-lm", "./bin/miniaudio.o", "main.c", "-o", "./bin/main");
   nom_run_sync(cmd);
   nom_cmd_reset(&cmd);
-  nom_cmd_append(&cmd, "./bin/main");
+  nom_cmd_append_many(&cmd, 2, "./bin/main", "./stuff");
   nom_run_path(cmd);
   return 0;
 }

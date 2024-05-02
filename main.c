@@ -26,6 +26,40 @@ int main(int argc, char** argv) {
   ma_device_config deviceConfig;
   ma_device device;
 
+  DIR* dir;
+  struct dirent* dirent;
+  Nom_cmd dir_files = {0};
+
+  argc -= 1;
+  argv += 1;
+
+  if(argc == 0) {
+    dir = opendir(".");
+  } else if(argc > 0) {
+    if(IS_PATH_DIR(argv[argc - 1])) {
+      dir = opendir(argv[argc - 1]);
+      while((dirent = readdir(dir))) {
+        char* dname = dirent->d_name;
+        if(strlen(dname) <= 2 && dname[0] == '.' || dname[1] == '.') {
+          continue;
+        }
+        nom_cmd_append(&dir_files, dname);
+      }
+    } else {
+      for(int i = 0; i < argc; i++) {
+        if(IS_PATH_FILE(argv[i])) {
+          nom_cmd_append(&dir_files, argv[i]);
+        }
+      }
+    }
+  }
+  refresh();
+  printw("argc=%d\n", argc);
+
+  for(int i = 0; i < dir_files.count; i++) {
+    printw("%s\n", dir_files.items[i]);
+  }
+
   result = ma_decoder_init_file("./stuff/down_with_the_sickness.mp3", NULL, &decoder);
   if(result != MA_SUCCESS) {
     return -2;
@@ -75,15 +109,18 @@ int main(int argc, char** argv) {
         continue;
       }
       volume += 0.1f;
+      ma_device_set_master_volume(&device, volume);
     }
     if(ch == 'c') {
       if(volume <= 0.0f) {
         continue;
       }
       volume -= 0.1f;
+      ma_device_set_master_volume(&device, volume);
     }
     if(ch == 'q') {
       not_close += 1;
+      endwin();
     }
     if(ch == 'p') {
       playing = !playing;
