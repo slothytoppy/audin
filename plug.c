@@ -29,7 +29,7 @@ typedef struct {
 static ta_state* p = NULL;
 static struct stat fi = {0};
 
-void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount) {
+void ta_data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount) {
   ma_decoder* pDecoder = (ma_decoder*)pDevice->pUserData;
   if(pDecoder == NULL) {
     return;
@@ -40,20 +40,20 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
   (void)pInput;
 }
 
-bool should_close(void) {
+bool ta_should_close(void) {
   p->should_close = true;
   return true;
 }
 
-bool set_volume(float volume) {
+bool ta_set_volume(float volume) {
   return ma_device_set_master_volume(&p->device, volume);
 }
 
-bool get_volume(float volume) {
+bool ta_get_volume(float volume) {
   return ma_device_get_master_volume(&p->device, &volume);
 }
 
-bool load_song_from_file(char* file) {
+bool ta_load_song_from_file(char* file) {
   if(stat(file, &fi) < 0) {
     return false;
   }
@@ -69,12 +69,16 @@ bool load_song_from_file(char* file) {
   return true;
 }
 
-func_unimplemented bool load_song_from_dir(char** dir) {
+func_unimplemented bool ta_load_song_from_dir(char** dir) {
   return false;
 }
 
-bool restart_song(void) {
+bool ta_restart_song(void) {
   return ma_decoder_seek_to_pcm_frame(&p->decoder, 0);
+}
+
+bool ta_mute(void) {
+  return ta_set_volume(0);
 }
 
 void plug_init(void) {
@@ -103,7 +107,7 @@ void plug_init(void) {
   p->device_config.playback.format = p->decoder.outputFormat;
   p->device_config.playback.channels = p->decoder.outputChannels;
   p->device_config.sampleRate = p->decoder.outputSampleRate;
-  p->data_callback = data_callback;
+  p->data_callback = ta_data_callback;
   p->device_config.dataCallback = p->data_callback;
   p->device_config.pUserData = &p->decoder;
 
