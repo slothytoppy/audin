@@ -2,6 +2,7 @@
 #include "./deps/miniaudio/extras/miniaudio_split/miniaudio.h"
 #include "./deps/nom/nom.h"
 #include <ncurses.h>
+#include <sys/time.h>
 
 void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount) {
   ma_decoder* pDecoder = (ma_decoder*)pDevice->pUserData;
@@ -14,53 +15,83 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
   (void)pInput;
 }
 
-int main(int argc, char** argv) {
-  rebuild(argc, argv, __FILE__, "gcc");
+bool load_file_from_fd(int fd, char* data) {
+  if(fd <= 0) {
+    return false;
+  }
+  struct stat fi;
+  int result = fstat(fd, &fi);
+  if(result != 0) {
+    return false;
+  }
+  return mmap(data, fi.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+}
 
+char* load_file_from_name(char* file, char* data) {
+  if(file == NULL) {
+    return NULL;
+  }
+  struct stat fi;
+  int result = stat(file, &fi);
+  int fd = open(file, O_RDWR);
+  if(result != 0 || fd < 0) {
+    printw("%s\n", strerror(errno));
+    return NULL;
+  }
+  data = mmap(data, fi.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+  if(data == MAP_FAILED) {
+    printw("%s\n", strerror(errno));
+    return NULL;
+  }
+  return data;
+}
+
+bool init_ncurses(void) {
   initscr();
   raw();
   noecho();
+  return true;
+}
 
-  ma_result result;
-  ma_decoder decoder;
-  ma_device_config deviceConfig;
-  ma_device device;
+ma_result ta_decoder_init_memory(ma_decoder* decoder, void* data, long int len, ...) {
 
-  DIR* dir;
-  struct dirent* dirent;
-  Nom_cmd dir_files = {0};
+  if(len == 0) {
+    va_list arg;
+    va_start(arg, len);
+    char* file = va_arg(arg, char*);
+    int fd = open(file, O_RDWR);
+    struct stat fi;
+    int success = fstat(fd, &fi);
+    len = fi.st_size;
+    data = mmap(data, len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    return ma_decoder_init_memory(data, len, NULL, decoder);
+  }
+  ma_decoder_init_memory(data, len, NULL, decoder);
+  return MA_SUCCESS;
+}
+
+int main(int argc, char** argv) {
+  rebuild(argc, argv, __FILE__, "gcc");
+  init_ncurses();
 
   argc -= 1;
   argv += 1;
 
-  if(argc == 0) {
-    dir = opendir(".");
-  } else if(argc > 0) {
-    if(IS_PATH_DIR(argv[argc - 1])) {
-      dir = opendir(argv[argc - 1]);
-      while((dirent = readdir(dir))) {
-        char* dname = dirent->d_name;
-        if(strlen(dname) <= 2 && dname[0] == '.' || dname[1] == '.') {
-          continue;
-        }
-        nom_cmd_append(&dir_files, dname);
-      }
-    } else {
-      for(int i = 0; i < argc; i++) {
-        if(IS_PATH_FILE(argv[i])) {
-          nom_cmd_append(&dir_files, argv[i]);
-        }
-      }
-    }
+  char* musicdata = load_file_from_name("./stuff/Nonpoint - Bullet With a Name.mp3", musicdata);
+  if(musicdata == NULL) {
+    endwin();
+    return 1;
   }
-  refresh();
-  printw("argc=%d\n", argc);
-
-  for(int i = 0; i < dir_files.count; i++) {
-    printw("%s\n", (char*)dir_files.items[i]);
+  struct stat fi;
+  if(stat("./stuff/Nonpoint - Bullet With a Name.mp3", &fi) < 0) {
+    printw("%s\n", strerror(errno));
+    return 1;
   }
+  // result = ma_decoder_init_file("./stuff/Nonpoint - Bullet With a Name.mp3", NULL, &decoder);
 
-  result = ma_decoder_init_file("./stuff/down_with_the_sickness.mp3", NULL, &decoder);
+  if(ta_decoder_init_memory(&decoder, musicdata, fi.st_size) != MA_TRUE) {
+    return 1;
+  }
   if(result != MA_SUCCESS) {
     return -2;
   }
@@ -91,23 +122,23 @@ int main(int argc, char** argv) {
   ma_engine engine;
   ma_sound sound;
   ma_engine_init(&engine_conf, &engine);
-  ma_sound_init_from_file(&engine, "./stuff/down_with_the_sickness.mp3", MA_SOUND_FLAG_DECODE, NULL, NULL, &sound);
-  // result = ma_engine_init(&engine_conf, &engine);
+  ma_sound_init_from_data_source(&engine, musicdata, MA_SOUND_FLAG_DECODE, NULL, &sound);
+  result = ma_engine_init(&engine_conf, &engine);
   ma_sound_config sound_config;
-  ma_sound_config_init_2(&engine);
-  printw("lenght=%llu\n", sound_config.rangeEndInPCMFrames);
-  refresh();
-  ma_uint64 length = 0;
   if(result != MA_SUCCESS) {
+    printf("%d\n", result);
     return result;
   }
-  if(result != MA_SUCCESS) {
-    return result;
-  }
-  bool playing = true;
   bool muted = false;
   ma_device_set_master_volume(&device, volume);
+  bool playing = true;
   while(!not_close) {
+    // curtime = clock() - length;
+    ma_float length = 0.0f;
+    ma_sound_get_length_in_seconds(&sound, &length);
+    printw("frames played: %f\n", length);
+    refresh();
+
     int ch = getchar();
     switch(ch) {
     case 'v':
@@ -132,22 +163,33 @@ int main(int argc, char** argv) {
       endwin();
       break;
     case 'd': {
+      float length = 0;
+      /*
       ma_sound_get_length_in_pcm_frames(&sound, &length);
       length = length / decoder.outputSampleRate;
+      printw("length: %llu\n", clock() - length);
+      */
       float volume_copy = volume;
       ma_device_get_master_volume(&device, &volume_copy);
-      printw("length: %llu\n", length);
+      ma_sound_get_length_in_seconds(&sound, &length);
+      while(length > 59) {
+        length /= 60;
+      }
+      printw("song len: %f\n", length);
       printw("volume: %f\n", volume_copy);
       break;
     }
-    case 'p':
+    case 'p': {
       playing = !playing;
-      if(!playing) {
+      if(playing) {
         ma_device_stop(&device);
       } else {
         ma_device_start(&device);
       }
+      printw("bool %d\n", playing);
+      refresh();
       break;
+    }
     case 'm':
       muted = !muted;
       if(muted) {
