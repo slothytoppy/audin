@@ -11,11 +11,15 @@ typedef struct {
   ma_decoder_config decoder_config;
   ma_device_config device_config;
   ma_device device;
-  float volume;
   ma_engine_config engine_conf;
   ma_engine engine;
   ma_sound sound;
   ma_device_data_proc data_callback;
+} Audio;
+
+typedef struct {
+  float volume;
+  Audio audio;
   bool should_close;
   bool is_muted;
   bool is_playing;
@@ -40,45 +44,98 @@ void ta_data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_
   (void)pInput;
 }
 
-bool ta_should_close(void) {
-  p->should_close = true;
-  return true;
-}
-
-bool ta_set_volume(float volume) {
-  return ma_device_set_master_volume(&p->device, volume);
-}
-
-bool ta_get_volume(float volume) {
-  return ma_device_get_master_volume(&p->device, &volume);
-}
-
-bool ta_load_song_from_file(char* file) {
-  if(stat(file, &fi) < 0) {
-    return false;
-  }
-  p->cur_song = file;
-  p->result = ma_decoder_init_file(file, NULL, &p->decoder);
-  if(p->result != MA_SUCCESS) {
-    return false;
-  }
-  ma_sound_init_from_file(&p->engine, file, MA_SOUND_FLAG_DECODE, NULL, NULL, &p->sound);
-  if(p->result != MA_SUCCESS) {
-    return false;
-  }
-  return true;
-}
-
 func_unimplemented bool ta_load_song_from_dir(char** dir) {
   return false;
 }
 
 bool ta_restart_song(void) {
-  return ma_decoder_seek_to_pcm_frame(&p->decoder, 0);
+  return ma_decoder_seek_to_pcm_frame(&p->audio.decoder, 0);
 }
 
 bool ta_mute(void) {
-  return ta_set_volume(0);
+  return ma_device_set_master_volume(&p->audio.device, 0.0f);
+}
+
+void check_error(void) {
+  if(p->result != MA_SUCCESS) {
+    printw("here failed with %d\n", p->result);
+    exit(1);
+  }
+}
+
+void init_device(void) {
+  p->audio.device_config = ma_device_config_init(ma_device_type_playback);
+  p->audio.device_config.playback.format = p->audio.decoder.outputFormat;
+  p->audio.device_config.playback.channels = p->audio.decoder.outputChannels;
+  p->audio.device_config.sampleRate = p->audio.decoder.outputSampleRate;
+  p->audio.data_callback = ta_data_callback;
+  p->audio.device_config.dataCallback = p->audio.data_callback;
+  p->audio.device_config.pUserData = &p->audio.decoder;
+
+  p->result = ma_device_init(NULL, &p->audio.device_config, &p->audio.device);
+  check_error();
+  p->result = ma_device_start(&p->audio.device);
+  check_error();
+  p->result = ma_device_set_master_volume(&p->audio.device, p->volume);
+  check_error();
+  p->result = ma_device_init(NULL, &p->audio.device_config, &p->audio.device);
+  check_error();
+  p->result = ma_device_start(&p->audio.device);
+  check_error();
+}
+
+void init_decoder(void) {
+  p->result = ma_decoder_init_file(p->cur_song, NULL, &p->audio.decoder);
+  check_error();
+}
+
+void init_engine(void) {
+  p->audio.engine_conf = ma_engine_config_init();
+  p->result = ma_engine_init(&p->audio.engine_conf, &p->audio.engine);
+  check_error();
+  p->result = ma_engine_start(&p->audio.engine);
+  check_error();
+}
+
+void init_sound(void) {
+  p->result = ma_sound_init_from_file(&p->audio.engine, p->cur_song, MA_SOUND_FLAG_DECODE, NULL, NULL, &p->audio.sound);
+  check_error();
+  p->result = ma_sound_start(&p->audio.sound);
+  check_error();
+}
+
+void load_sound(char* song) {
+  p->cur_song = song;
+  init_engine();
+  init_device();
+  init_decoder();
+  init_sound();
+}
+
+void uninit_engine(void) {
+  ma_engine_stop(&p->audio.engine);
+  ma_engine_uninit(&p->audio.engine);
+}
+
+void uninit_device(void) {
+  ma_device_stop(&p->audio.device);
+  ma_device_uninit(&p->audio.device);
+}
+
+void uninit_decoder(void) {
+  ma_decoder_uninit(&p->audio.decoder);
+}
+
+void uninit_sound(void) {
+  ma_sound_stop(&p->audio.sound);
+  ma_sound_uninit(&p->audio.sound);
+}
+
+void unload_sound(void) {
+  uninit_engine();
+  uninit_device();
+  uninit_decoder();
+  uninit_sound();
 }
 
 void plug_init(void) {
@@ -86,60 +143,24 @@ void plug_init(void) {
   noecho();
   raw();
   p = malloc(sizeof(*p));
-  p->should_close = false;
   p->volume = 0.5f;
-  p->cur_song = "./stuff/Nonpoint - Bullet With a Name.mp3";
-  // engine_init
-#if 0
-  p->engine_conf = ma_engine_config_init();
-  p->result = ma_engine_init(&p->engine_conf, &p->engine);
-  p->result = ma_sound_init_from_file(&p->engine, p->cur_song, MA_SOUND_FLAG_DECODE, NULL, NULL, &p->sound);
-  p->result = ma_sound_get_length_in_seconds(&p->sound, &p->length);
-  printw("%f", p->length);
-#endif
-  // device_init
-  p->result = ma_decoder_init_file(p->cur_song, NULL, &p->decoder);
-  if(p->result != MA_SUCCESS) {
-    printw("failed with %d\n", p->result);
-    return;
-  }
-  p->device_config = ma_device_config_init(ma_device_type_playback);
-  p->device_config.playback.format = p->decoder.outputFormat;
-  p->device_config.playback.channels = p->decoder.outputChannels;
-  p->device_config.sampleRate = p->decoder.outputSampleRate;
-  p->data_callback = ta_data_callback;
-  p->device_config.dataCallback = p->data_callback;
-  p->device_config.pUserData = &p->decoder;
-
-  if(p->result != MA_SUCCESS) {
-    printw("failed with %d\n", p->result);
-    return;
-  }
-  p->result = ma_device_init(NULL, &p->device_config, &p->device);
-  if(p->result != MA_SUCCESS) {
-    printw("failed with %d\n", p->result);
-    return;
-  }
-  if(p->result != MA_SUCCESS) {
-    printw("failed with %d\n", p->result);
-    return;
-  }
-
-  // decoder_init
-  if(p->result != MA_SUCCESS) {
-    printw("failed with %d\n", p->result);
-    return;
-  }
-  // sound_init
-  // device_start
-  p->result = ma_device_start(&p->device);
-  p->should_close = false;
-  p->result = ma_device_set_master_volume(&p->device, p->volume);
-  if(p->result != MA_SUCCESS) {
-    printw("here failed with %d\n", p->result);
-    return;
-  }
-  float vol_copy = p->volume;
-  ma_device_get_master_volume(&p->device, &vol_copy);
+  load_sound("./stuff/down_with_the_sickness.mp3");
+  float vol_copy = 0.0f;
+  p->result = ma_device_get_master_volume(&p->audio.device, &vol_copy);
+  check_error();
   printw("volume: %f\n", vol_copy);
+}
+
+ta_state* plug_pre_update(void) {
+  p->result = ma_decoder_uninit(&p->audio.decoder);
+  ma_device_uninit(&p->audio.device);
+  ma_sound_uninit(&p->audio.sound);
+  // ma_device_stop(&p->audio.device);
+  //  ma_sound_stop(&p->audio.sound);
+  return p;
+}
+
+void plug_post_update(ta_state* pp) {
+  p = pp;
+  load_sound(p->cur_song);
 }

@@ -1,7 +1,8 @@
 #ifndef TA_PLUG
 #define TA_PLUG
 
-bool should_close(void);
 void plug_init(void);
+void* plug_pre_update();
+void plug_post_update(void*);
 
 #endif // TA_PLUG

@@ -8,15 +8,15 @@ int main(int argc, char** argv) {
     mkdir_if_not_exist("./bin");
   }
 
-  if(!IS_PATH_EXIST("./bin/miniaudio.o")) {
-    nom_cmd_append_many(&cmd, 5, "gcc", "./deps/miniaudio/extras/miniaudio_split/miniaudio.c", "-c", "-o", "./bin/miniaudio.o");
+  char* ma_source_path = "./deps/miniaudio/extras/miniaudio_split/miniaudio.c";
+  if(!IS_PATH_EXIST("./bin/plug.so") || needs_rebuild("./plug.c", "./bin/plug.so")) {
+    nom_cmd_append_many(&cmd, 8, "gcc", "-g", "-fPIC", "-shared", ma_source_path, "plug.c", "-o", "./bin/plug.so");
     nom_run_sync(cmd);
     nom_cmd_reset(&cmd);
   }
-  nom_cmd_append_many(&cmd, 9, "gcc", "-g", "-lncurses", "-lm", "./bin/miniaudio.o", "./plug.c", "main.c", "-o", "./bin/main");
+
+  nom_cmd_append_many(&cmd, 7, "gcc", "-g", "-lncurses", "-lm", "main.c", "-o", "./bin/main");
   nom_run_sync(cmd);
   nom_cmd_reset(&cmd);
-  nom_cmd_append_many(&cmd, 2, "./bin/main", "./stuff");
-  nom_run_path(cmd);
   return 0;
 }
