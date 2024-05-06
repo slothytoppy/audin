@@ -1,6 +1,11 @@
 #include "common.h"
 
 typedef struct {
+  char** queue;
+  long int count;
+} Track;
+
+typedef struct {
   ma_decoder decoder;
   ma_device_config deviceConfig;
   ma_device device;
@@ -9,6 +14,7 @@ typedef struct {
   ma_float volume;
   ma_engine engine;
   ma_engine_config engine_config;
+  Track track;
 } Audio;
 
 Audio audio = {0};
@@ -120,6 +126,7 @@ int main(int argc, char** argv) {
     nom_cmd_append(&cmd, dname);
   }
   assert(cmd.count > 0);
+  printw("cmd.count %d\n", cmd.count);
   char ch = getch();
   bool close = false;
   long int index = 0;
@@ -137,10 +144,11 @@ int main(int argc, char** argv) {
       close = true;
       break;
     case 's':
-      if(index + 1 > cmd.count) {
+      index += 1;
+      if(index > cmd.count - 1) {
         index = 0;
       }
-      index += 1;
+      printw("index %d\n", index);
       printw("current song %s\n", cmd.items[index]);
       UnloadSong();
       LoadSong(cmd.items[index]);
@@ -157,6 +165,8 @@ int main(int argc, char** argv) {
         ChangeVolume(volume);
       }
       break;
+    case 'r':
+      ma_decoder_seek_to_pcm_frame(&audio.decoder, 0);
     default:
       printw("song %s\nvolume %f\n", cmd.items[index], GetVolume());
       refresh();
