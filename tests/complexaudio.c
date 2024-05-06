@@ -20,10 +20,23 @@ typedef struct {
 Audio audio = {0};
 ma_result result;
 
+void ConvertSoundLengthToSeconds(void) {
+  float length = 0;
+  result = ma_sound_get_length_in_seconds(&audio.sound, &length);
+  if(result != MA_SUCCESS) {
+    printw("sound get length %s\n", ma_result_description(result));
+    return;
+  }
+  while(length > 59) {
+    length /= 59;
+  }
+  printw("length %f\n", length);
+}
+
 bool LoadSong(char* song) {
   result = ma_decoder_init_file(song, NULL, &audio.decoder);
   if(result != MA_SUCCESS) {
-    printw("could not load %s for %d\n", song, result);
+    printw("decoder init %s\n", ma_result_description(result));
     goto refscr;
     return false;
   }
@@ -36,14 +49,14 @@ bool LoadSong(char* song) {
 
   result = ma_device_init(NULL, &audio.deviceConfig, &audio.device);
   if(result != MA_SUCCESS) {
-    printw("Failed to open playback device.\n");
+    printw("device init %s\n", ma_result_description(result));
     ma_decoder_uninit(&audio.decoder);
     goto refscr;
     return false;
   }
   result = ma_device_start(&audio.device);
   if(result != MA_SUCCESS) {
-    printw("Failed to start playback device.\n");
+    printw("device start %s\n", ma_result_description(result));
     ma_device_uninit(&audio.device);
     ma_decoder_uninit(&audio.decoder);
     goto refscr;
@@ -52,33 +65,36 @@ bool LoadSong(char* song) {
   audio.engine_config = ma_engine_config_init();
   result = ma_engine_init(&audio.engine_config, &audio.engine);
   if(result != MA_SUCCESS) {
-    printw("could initialize engine for %d\n", result);
+    printw("engine init %s\n", ma_result_description(result));
     goto refscr;
     return false;
   }
   result = ma_engine_start(&audio.engine);
   if(result != MA_SUCCESS) {
-    printw("could not start engine\n");
+    printw("engine start %s\n", ma_result_description(result));
     ma_decoder_uninit(&audio.decoder);
     goto refscr;
     return false;
   }
-
+  // audio.sound.pDataSource = &audio.decoder;
   audio.sound_config = ma_sound_config_init();
   result = ma_sound_init_ex(&audio.engine, &audio.sound_config, &audio.sound);
   if(result != MA_SUCCESS) {
-    printw("could not initialize sound\n");
-    ma_decoder_uninit(&audio.decoder);
-    goto refscr;
-    return false;
-  }
-  if(result != MA_SUCCESS) {
-    printw("could not start sound\n");
+    printw("sound init %s\n", ma_result_description(result));
     ma_decoder_uninit(&audio.decoder);
     goto refscr;
     return false;
   }
   result = ma_sound_start(&audio.sound);
+  if(result != MA_SUCCESS) {
+    printw("sound %s\n", ma_result_description(result));
+    ma_decoder_uninit(&audio.decoder);
+    goto refscr;
+    return false;
+  }
+  audio.sound.pDataSource = &audio.decoder;
+
+  refresh();
 
 refscr:
   refresh();
@@ -133,7 +149,6 @@ int main(int argc, char** argv) {
   float volume = 0.0f;
   if(LoadSong("../stuff/down_with_the_sickness.mp3") != true) {
     endwin();
-    exit(1);
   }
   nom_log_cmd(NOM_INFO, NULL, cmd);
   printw("current song %s\n", cmd.items[index]);
@@ -152,6 +167,7 @@ int main(int argc, char** argv) {
       printw("current song %s\n", cmd.items[index]);
       UnloadSong();
       LoadSong(cmd.items[index]);
+      ConvertSoundLengthToSeconds();
       break;
     case 'c':
       if(volume > 0) {
