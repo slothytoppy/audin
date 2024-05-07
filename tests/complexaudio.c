@@ -14,30 +14,40 @@ typedef struct {
   ma_float volume;
   ma_engine engine;
   ma_engine_config engine_config;
-  Track track;
+  ma_mutex mutex;
+  ma_uint64 song_len;
 } Audio;
 
 Audio audio = {0};
 ma_result result;
 
-void ConvertSoundLengthToSeconds(void) {
-  float length = 0;
-  result = ma_sound_get_length_in_seconds(&audio.sound, &length);
-  if(result != MA_SUCCESS) {
-    printw("sound get length %s\n", ma_result_description(result));
-    return;
-  }
-  while(length > 59) {
-    length /= 59;
-  }
-  printw("length %f\n", length);
+typedef struct SongLength {
+  ma_uint8 minutes;
+  ma_uint8 seconds;
+} SongLength;
+
+SongLength GetReadableSongLength(void) {
+  ma_float total_seconds = (float)audio.song_len / (float)audio.decoder.outputSampleRate;
+  ma_uint8 minutes = total_seconds / 60;
+  ma_uint8 seconds = (int)total_seconds % 60;
+
+  printw("song length %d:%d\n", minutes, seconds);
+  SongLength song_length = {.minutes = minutes, .seconds = seconds};
+  refresh();
+  return song_length;
+}
+// for minutes->seconds no? length*=audio.decoder.outputSampleRate;
+
+void MutexInit(void) {
+  result = ma_mutex_init(&audio.mutex);
+  assert(result == MA_SUCCESS);
 }
 
 bool LoadSong(char* song) {
   result = ma_decoder_init_file(song, NULL, &audio.decoder);
   if(result != MA_SUCCESS) {
     printw("decoder init %s\n", ma_result_description(result));
-    goto refscr;
+    refresh();
     return false;
   }
   audio.deviceConfig = ma_device_config_init(ma_device_type_playback);
@@ -51,7 +61,7 @@ bool LoadSong(char* song) {
   if(result != MA_SUCCESS) {
     printw("device init %s\n", ma_result_description(result));
     ma_decoder_uninit(&audio.decoder);
-    goto refscr;
+    refresh();
     return false;
   }
   result = ma_device_start(&audio.device);
@@ -59,42 +69,52 @@ bool LoadSong(char* song) {
     printw("device start %s\n", ma_result_description(result));
     ma_device_uninit(&audio.device);
     ma_decoder_uninit(&audio.decoder);
-    goto refscr;
+    refresh();
     return false;
   }
   audio.engine_config = ma_engine_config_init();
   result = ma_engine_init(&audio.engine_config, &audio.engine);
   if(result != MA_SUCCESS) {
     printw("engine init %s\n", ma_result_description(result));
-    goto refscr;
+    refresh();
     return false;
   }
   result = ma_engine_start(&audio.engine);
   if(result != MA_SUCCESS) {
     printw("engine start %s\n", ma_result_description(result));
     ma_decoder_uninit(&audio.decoder);
-    goto refscr;
+    refresh();
     return false;
   }
   // audio.sound.pDataSource = &audio.decoder;
   audio.sound_config = ma_sound_config_init();
   result = ma_sound_init_ex(&audio.engine, &audio.sound_config, &audio.sound);
+  if(!ma_sound_is_spatialization_enabled(&audio.sound)) {
+    printw("not enabled\n");
+    refresh();
+  }
+
   if(result != MA_SUCCESS) {
     printw("sound init %s\n", ma_result_description(result));
     ma_decoder_uninit(&audio.decoder);
-    goto refscr;
+    refresh();
     return false;
   }
   result = ma_sound_start(&audio.sound);
   if(result != MA_SUCCESS) {
     printw("sound %s\n", ma_result_description(result));
     ma_decoder_uninit(&audio.decoder);
-    goto refscr;
+    refresh();
     return false;
   }
   audio.sound.pDataSource = &audio.decoder;
-
-  refresh();
+  result = ma_sound_get_length_in_pcm_frames(&audio.sound, &audio.song_len);
+  if(result != MA_SUCCESS) {
+    printw("error getting sound length %s\n", ma_result_description(result));
+    ma_decoder_uninit(&audio.decoder);
+    refresh();
+    return false;
+  }
 
 refscr:
   refresh();
@@ -103,9 +123,11 @@ refscr:
 }
 
 bool UnloadSong() {
+  ma_mutex_lock(&audio.mutex);
   ma_decoder_uninit(&audio.decoder);
   ma_sound_uninit(&audio.sound);
   ma_device_uninit(&audio.device);
+  ma_mutex_unlock(&audio.mutex);
   return true;
 }
 
@@ -119,8 +141,33 @@ float GetVolume(void) {
   return volume;
 }
 
-bool GetSongLength(float* length) {
-  return (false);
+ma_uint64 GetSongLength() {
+  ma_uint64 length = audio.song_len;
+  if(length == 0) {
+    printw("error getting sound length %s\n", ma_result_description(result));
+    refresh();
+  }
+  return length;
+}
+
+bool GoToEnd(void) {
+  if(ma_sound_at_end(&audio.sound)) {
+    return true;
+  }
+  ma_uint64 total_length = audio.song_len;
+  if(total_length == 0) {
+    printw("length is too low\n");
+    refresh();
+    return false;
+  }
+  result = ma_sound_seek_to_pcm_frame(&audio.sound, total_length);
+  if(result != MA_SUCCESS) {
+    printw("error seeking %s\n", ma_result_description(result));
+  }
+  SongLength song_len = GetReadableSongLength();
+  printw("total len %d:%d\n", song_len.minutes, song_len.seconds);
+  refresh();
+  return true;
 }
 
 int main(int argc, char** argv) {
@@ -131,6 +178,7 @@ int main(int argc, char** argv) {
   initscr();
   noecho();
   raw();
+  MutexInit();
   struct dirent* dirent;
   DIR* dir = opendir(argv[1]);
   chdir(argv[1]);
@@ -146,28 +194,42 @@ int main(int argc, char** argv) {
   char ch = getch();
   bool close = false;
   long int index = 0;
-  float volume = 0.0f;
-  if(LoadSong("../stuff/down_with_the_sickness.mp3") != true) {
+  float volume = 0.5f;
+  if(LoadSong(cmd.items[index]) != true) {
     endwin();
   }
   nom_log_cmd(NOM_INFO, NULL, cmd);
-  printw("current song %s\n", cmd.items[index]);
+  printw("current song %s\n", (char*)cmd.items[index]);
+  ma_uint64 length = 0;
+  ma_sound_get_length_in_pcm_frames(&audio.sound, &length);
+  ChangeVolume(volume);
+  bool playing = true;
   while(close != true) {
     ch = getch();
     switch(ch) {
     case 'q':
       close = true;
       break;
+    case 'p':
+      if(playing) {
+        ma_device_stop(&audio.device);
+      } else {
+        ma_device_start(&audio.device);
+      }
+      playing = !playing;
+      break;
     case 's':
       index += 1;
       if(index > cmd.count - 1) {
         index = 0;
       }
-      printw("index %d\n", index);
-      printw("current song %s\n", cmd.items[index]);
+      printw("index %lu\n", index);
+      printw("current song %s\n", (char*)cmd.items[index]);
       UnloadSong();
       LoadSong(cmd.items[index]);
-      ConvertSoundLengthToSeconds();
+      GetReadableSongLength();
+      ma_sound_get_length_in_pcm_frames(&audio.sound, &length);
+      ChangeVolume(volume);
       break;
     case 'c':
       if(volume > 0) {
@@ -183,10 +245,25 @@ int main(int argc, char** argv) {
       break;
     case 'r':
       ma_decoder_seek_to_pcm_frame(&audio.decoder, 0);
+      break;
+    case 'e':
+      GoToEnd();
+      break;
     default:
-      printw("song %s\nvolume %f\n", cmd.items[index], GetVolume());
+
+      printw("song %s\nvolume %f\n", (char*)cmd.items[index], GetVolume());
+      printw("pcm frames length %llu\n", length);
       refresh();
     }
+    if(ma_sound_at_end(&audio.sound)) {
+      index += 1;
+      if(index > cmd.count - 1) {
+        index = 0;
+      }
+      LoadSong(cmd.items[index]);
+      printw("at end of song\n");
+    }
   }
-  assert(cmd.count > 0);
+  endwin();
+  echo();
 }

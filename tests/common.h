@@ -1,4 +1,5 @@
 #include "../deps/miniaudio/extras/miniaudio_split/miniaudio.h"
+#define mini "../deps/miniaudio/extras/miniaudio_split/miniaudio.c"
 #include "../deps/nom/nom.h"
 #include <assert.h>
 #include <dirent.h>
