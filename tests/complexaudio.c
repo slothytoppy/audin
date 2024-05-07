@@ -36,7 +36,6 @@ SongLength GetReadableSongLength(void) {
   refresh();
   return song_length;
 }
-// for minutes->seconds no? length*=audio.decoder.outputSampleRate;
 
 void MutexInit(void) {
   result = ma_mutex_init(&audio.mutex);
@@ -187,7 +186,9 @@ int main(int argc, char** argv) {
     char* dname = dirent->d_name;
     if(strlen(dname) <= 2 && dname[0] == '.' || dname[1] == '.')
       continue;
-    nom_cmd_append(&cmd, dname);
+    if(IS_PATH_FILE(dname)) {
+      nom_cmd_append(&cmd, dname);
+    }
   }
   assert(cmd.count > 0);
   printw("cmd.count %d\n", cmd.count);

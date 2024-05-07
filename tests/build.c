@@ -1,32 +1,42 @@
 #include "../deps/nom/nom.h"
 #include <limits.h>
 
+bool ends_with(char* string, char* ext) {
+  if(string == NULL || ext == NULL) {
+    return false;
+  }
+  long int string_len = strlen(string);
+  long int ext_len = strlen(ext);
+  char* string_copy = string;
+  string_copy = string_copy + string_len - ext_len;
+  for(int i = 0; string_copy[i] && ext[i]; i++) {
+    if(string_copy[i] != ext[i]) {
+      return false;
+    }
+  }
+  printf("%s %s\n", string_copy, ext);
+  return true;
+}
+
+void build_file(char* file) {
+  Nom_cmd cmd = {0};
+  nom_cmd_append_many(&cmd, 7, "gcc", "-lm", "-lncurses", "../bin/miniaudio.o", file, "-o", base(file));
+  nom_run_async(cmd);
+}
+
 int main(int argc, char** argv) {
   rebuild(argc, argv, __FILE__, "gcc");
   Nom_cmd cmd = {0};
-  char* filepath;
-  if(argc < 2) {
-    nom_cmd_append_many(&cmd, 7, "gcc", "-lm", "-lncurses", "../bin/miniaudio.o", "complexaudio.c", "-o", "complexaudio");
-    nom_run_sync(cmd);
-    nom_cmd_reset(&cmd);
-    nom_cmd_append_many(&cmd, 2, "./complexaudio", "../stuff");
-    return nom_run_path(cmd);
-  } else {
-    char* endptr;
-    unsigned ind = strtol(argv[1], &endptr, 10);
-    switch(ind) {
-    case 0:
-      filepath = "simpleaudio.c";
-      break;
-    case 1:
-      filepath = "complexaudio.c";
-      break;
-    case 2:
-      filepath = "managed_audio.c";
-      break;
-    };
+  struct dirent* dirent;
+  DIR* dir;
+  dir = opendir(".");
+  while((dirent = readdir(dir))) {
+    if(strlen(dirent->d_name) <= 2 && dirent->d_name[0] == '.' || dirent->d_name[1] == '.') {
+      continue;
+    }
+    int result = strcmp(dirent->d_name, ".c");
+    if(ends_with(dirent->d_name, ".c")) {
+      build_file(dirent->d_name);
+    }
   }
-  nom_cmd_append_many(&cmd, 7, "gcc", "-lm", "-lncurses", "../bin/miniaudio.o", filepath, "-o", base(filepath));
-  nom_run_sync(cmd);
-  nom_cmd_reset(&cmd);
 }
