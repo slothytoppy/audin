@@ -30,13 +30,23 @@ int main(int argc, char** argv) {
   struct dirent* dirent;
   DIR* dir;
   dir = opendir(".");
+  bool remove_all = false;
+  if(argc > 2 && strcmp(argv[1], "clean")) {
+    remove_all = true;
+  }
   while((dirent = readdir(dir))) {
     if(strlen(dirent->d_name) <= 2 && dirent->d_name[0] == '.' || dirent->d_name[1] == '.') {
       continue;
     }
-    int result = strcmp(dirent->d_name, ".c");
     if(ends_with(dirent->d_name, ".c")) {
-      build_file(dirent->d_name);
+      if(remove_all == true) {
+        remove(base(dirent->d_name));
+        if(IS_PATH_EXIST("build.old")) {
+          remove("build.old");
+        }
+      } else {
+        build_file(dirent->d_name);
+      }
     }
   }
 }

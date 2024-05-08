@@ -23,6 +23,7 @@ typedef struct Audio {
     ma_uint64 length; // length of the song in seconds
     ma_bool8 playing; // no paused field because !playing means it is paused
     ma_bool8 looping;
+    ma_bool8 at_end;
   } internal;
   struct time {
     ma_uint64 frame_count;
@@ -123,8 +124,11 @@ void data_source_data_callback(ma_device* pDevice, void* pOutput, const void* pI
   if(pdatasource == NULL) {
     return;
   }
-
-  ma_data_source_read_pcm_frames(pdatasource, pOutput, frameCount, NULL);
+  ma_uint64 framesRead;
+  ma_data_source_read_pcm_frames(pdatasource, pOutput, frameCount, &framesRead);
+  if(frameCount != framesRead) {
+    audio.internal.at_end = true;
+  }
   ma_decoder_get_cursor_in_pcm_frames(&audio.base.decoder, &audio.base.cursor);
 
   (void)pInput;
@@ -188,6 +192,7 @@ Music LoadSong(char* filepath) {
   ma_uint64 song_length;
   ma_decoder_get_length_in_pcm_frames(&audio.base.decoder, &song_length);
   audio.base.frames_count = song_length;
+  audio.internal.at_end = false;
   return music;
   // ma_data_converter_process_pcm_frames()
   // ma_data_converter_init()
@@ -212,9 +217,6 @@ float GetSongLengthInSeconds(void) {
 
 float GetSongLengthInMinutes(void) {
   float secondsplayed = 0.0f;
-  ma_uint64 cursor;
-  ma_decoder_get_cursor_in_pcm_frames(&audio.base.decoder, &cursor);
-  // secondsplayed = cursor % audio.base.frames_count;
   secondsplayed = GetSongLengthInSeconds();
   audio.time.total_seconds = secondsplayed;
   audio.time.seconds = (int)secondsplayed % 60;
@@ -234,7 +236,7 @@ float SongTimePlayedInSeconds() {
 }
 
 bool AtSongEnd() {
-  if(SongTimePlayedInSeconds() == GetSongLengthInSeconds()) {
+  if(audio.internal.at_end == true) {
     return true;
   }
   return false;
