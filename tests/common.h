@@ -25,14 +25,3 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
 
   (void)pInput;
 }
-
-void data_source_data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount) {
-  ma_data_source* pdatasource = (ma_data_source*)pDevice->pUserData;
-  if(pdatasource == NULL) {
-    return;
-  }
-
-  ma_data_source_read_pcm_frames(pdatasource, pOutput, frameCount, NULL);
-
-  (void)pInput;
-}
