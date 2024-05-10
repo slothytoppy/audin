@@ -1,4 +1,8 @@
 #include "common.h"
+#include "ui.h"
+
+// TODO: add audio threading
+// make v1 UI
 
 typedef struct Music {
   bool looping;
@@ -24,6 +28,7 @@ typedef struct Audio {
     ma_bool8 playing; // no paused field because !playing means it is paused
     ma_bool8 looping;
     ma_bool8 at_end;
+    ma_bool8 muted;
   } internal;
   struct time {
     ma_uint64 frame_count;
@@ -90,13 +95,11 @@ bool SetDeviceVolume(float volume) {
 }
 
 bool SetVolume(float volume) {
-  if(volume <= 1.0f && volume > 0.0f) {
+  if(volume <= 1.1f && volume > 0.0f) {
     SetInternalVolume(volume);
     SetDeviceVolume(volume);
-    printw("volume %f \n", volume);
     return true;
   } else {
-    printw("error tried to change volume from %f to %f is below 0.0f\n", audio.internal.volume, volume);
     return false;
   }
 }
@@ -105,25 +108,40 @@ bool IsAudioReady(void) {
   return audio.base.is_ready;
 }
 
-bool GoToSongEnd(Music song) {
-  ma_uint64 frames;
-  ma_decoder_get_available_frames(&audio.base.decoder, &frames);
-  printw("frames %llu\n", frames);
+bool GoToSongEnd() {
+  // ma_uint64 frames;
+  // ma_decoder_get_available_frames(&audio.base.decoder, &frames);
+  // printw("frames %llu\n", frames);
+  ma_mutex_lock(&audio.base.mutex);
   ma_result result = ma_decoder_seek_to_pcm_frame(&audio.base.decoder, audio.base.frames_count);
+  ma_mutex_unlock(&audio.base.mutex);
   if(result != MA_SUCCESS) {
     return false;
   }
+  audio.internal.at_end = true;
   return true;
+}
+
+bool AtSongEnd() {
+  if(audio.internal.at_end == true || audio.base.cursor == audio.base.frames_count) {
+    return true;
+  }
+  return false;
 }
 
 void data_source_data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount) {
   ma_data_source* pdatasource = (ma_data_source*)pDevice->pUserData;
+  if(AtSongEnd()) {
+    audio.internal.playing = MA_FALSE;
+    return;
+  }
   if(audio.internal.playing == MA_FALSE) {
     return;
   }
   if(pdatasource == NULL) {
     return;
   }
+  ma_mutex_lock(&audio.base.mutex);
   ma_uint64 framesRead;
   ma_data_source_read_pcm_frames(pdatasource, pOutput, frameCount, &framesRead);
   if(frameCount != framesRead) {
@@ -132,6 +150,7 @@ void data_source_data_callback(ma_device* pDevice, void* pOutput, const void* pI
   ma_decoder_get_cursor_in_pcm_frames(&audio.base.decoder, &audio.base.cursor);
 
   (void)pInput;
+  ma_mutex_unlock(&audio.base.mutex);
 }
 
 void InitAudio(void) {
@@ -145,12 +164,12 @@ void InitAudio(void) {
   audio.base.device_config.pUserData = NULL;
   result = ma_device_init(NULL, &audio.base.device_config, &audio.base.device);
   if(result != MA_SUCCESS) {
-    printw("%s\n", ma_result_description(result));
+    printf("%s\n", ma_result_description(result));
     return;
   }
   result = ma_device_start(&audio.base.device);
   if(result != MA_SUCCESS) {
-    printw("%s\n", ma_result_description(result));
+    printf("%s\n", ma_result_description(result));
     return;
   }
   audio.base.is_ready = true;
@@ -200,13 +219,12 @@ Music LoadSong(char* filepath) {
 
 void PlaySound(Music music) {
   audio.internal.playing = MA_TRUE;
+  audio.internal.muted = MA_TRUE;
   ma_device_start(&audio.base.device);
 }
 
 void UnloadSong(Music song) {
-  audio.base.is_ready = false;
-  ma_decoder_uninit(&audio.base.decoder);
-  ma_device_uninit(&audio.base.device);
+  audio.base.decoder.pUserData = NULL;
 }
 
 float GetSongLengthInSeconds(void) {
@@ -215,13 +233,17 @@ float GetSongLengthInSeconds(void) {
   return (float)seconds;
 }
 
+float GetRemainingSongLength(void) {
+  float seconds = (float)audio.base.frames_count;
+  return seconds;
+}
+
 float GetSongLengthInMinutes(void) {
   float secondsplayed = 0.0f;
   secondsplayed = GetSongLengthInSeconds();
   audio.time.total_seconds = secondsplayed;
   audio.time.seconds = (int)secondsplayed % 60;
   audio.time.minutes = (int)secondsplayed / 60;
-  printw("length %d:%d\n", audio.time.minutes, audio.time.seconds);
   return secondsplayed;
 }
 
@@ -231,22 +253,23 @@ float SongTimePlayedInSeconds() {
   ma_decoder_get_cursor_in_pcm_frames(&audio.base.decoder, &cursor);
   secondsplayed = (float)cursor / (float)audio.base.decoder.outputSampleRate;
   secondsplayed = (int)secondsplayed % 60;
-  printw("played %f\n", secondsplayed);
+  char* buff = calloc(1, 9);
+  snprintf(buff, 9, "%d", (int)secondsplayed);
+  int cx = maxx() / 2;
+  int cy = maxy() / 2;
+  assert(cx < maxx() && cy < maxy());
+  renderat(cx, cy, buff);
   return secondsplayed;
 }
 
-bool AtSongEnd() {
-  if(audio.internal.at_end == true) {
-    return true;
-  }
-  return false;
-}
-
 int main(void) {
+  InitAudio();
   Nom_cmd cmd = {0};
   struct dirent* dirent;
-  DIR* dir = opendir("../stuff");
+  int fd = open("../stuff", O_DIRECTORY | O_RDONLY);
+  DIR* dir = fdopendir(fd);
   chdir("../stuff");
+  ncurses_init();
   while((dirent = readdir(dir))) {
     char* dname = dirent->d_name;
     if(strlen(dname) <= 2 && dname[0] == '.' || dname[1] == '.') {
@@ -258,61 +281,63 @@ int main(void) {
   }
   Music song = {0};
   long int index = 0;
-  nom_log_cmd(NOM_INFO, "", cmd);
-  InitAudio();
-  if(IsAudioReady()) {
-    song = LoadSong(cmd.items[index]);
-    PlaySound(song);
-  }
+  song = LoadSong(cmd.items[index]);
+  PlaySound(song);
   bool should_close = false;
-  initscr();
-  raw();
-  noecho();
   while(!should_close) {
-    char ch = getch();
+    int ch = getch();
     switch(ch) {
     case 'q':
-      endwin();
-      echo();
+      ncurses_deinit();
       should_close = !should_close;
       break;
+    case ' ':
     case 'p':
       audio.internal.playing = !audio.internal.playing;
       break;
+    case KEY_DOWN:
     case 'c':
       SetVolume(audio.internal.volume - 0.1f);
       break;
+    case KEY_UP:
     case 'v':
       SetVolume(audio.internal.volume + 0.1f);
       break;
-    case 'l':
-      audio.internal.looping = true;
     case 's':
+      ma_mutex_lock(&audio.base.mutex);
       index += 1;
       if(index > cmd.count - 1) {
         index = 0;
       }
+      UnloadSong(song);
       song = LoadSong(cmd.items[index]);
       PlaySound(song);
-      printw("playing %s\n", cmd.items[index]);
+      GetSongLengthInMinutes();
+      ma_mutex_unlock(&audio.base.mutex);
       break;
     case 'g':
-      GoToSongEnd(song);
+      GoToSongEnd();
       break;
-    default:
-      GetSongLengthInMinutes();
-      printw("volume %f\n", audio.internal.volume);
-      printw("playing %s\n", cmd.items[index]);
-      SongTimePlayedInSeconds();
+    case 'm':
+      audio.internal.muted = !audio.internal.muted;
+      if(audio.internal.muted) {
+        SetVolume(audio.internal.volume);
+      } else {
+        ma_device_set_master_volume(&audio.base.device, 0);
+      }
     }
     if(AtSongEnd()) {
+      ma_mutex_lock(&audio.base.mutex);
       index += 1;
       if(index > cmd.count - 1) {
         index = 0;
       }
       song = LoadSong(cmd.items[index]);
       PlaySound(song);
-      printw("playing %s\n", cmd.items[index]);
+      GetSongLengthInMinutes();
+      ma_mutex_unlock(&audio.base.mutex);
     }
+    SongTimePlayedInSeconds();
   }
+  ncurses_deinit();
 }

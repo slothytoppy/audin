@@ -553,7 +553,7 @@ unsigned int rebuild(int argc, char* argv[], char* file, char* compiler) {
   nom_log(NOM_DEBUG, "argv: ");
   if(nom_logger.show_debug == ON) {
     for(int i = 0; i < argc; i++) {
-      nom_log(NOM_NONE, "%s", argv[i]);
+      nom_log(NOM_NONE, "%s ", argv[i]);
     }
     nom_log(NOM_NONE, "\n");
   }
