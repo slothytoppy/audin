@@ -1,5 +1,4 @@
 #include "../deps/nom/nom.h"
-#include <limits.h>
 
 bool ends_with(char* string, char* ext) {
   if(string == NULL || ext == NULL) {
@@ -19,7 +18,7 @@ bool ends_with(char* string, char* ext) {
 
 void build_ui(void) {
   Nom_cmd cmd = {0};
-  nom_cmd_append_many(&cmd, 6, "gcc", "-lpthread", "ui.c", "-c", "-o", "ui.o");
+  nom_cmd_append_many(&cmd, 7, "gcc", "-g", "-lpthread", "ui.c", "-c", "-o", "ui.o");
   nom_run_async(cmd);
   nom_cmd_reset(&cmd);
   free(cmd.items);
@@ -28,13 +27,13 @@ void build_ui(void) {
 void build_file(char* file) {
   build_ui();
   Nom_cmd cmd = {0};
-  nom_cmd_append_many(&cmd, 7, "gcc", "-lm", "-lncurses", "../bin/miniaudio.o", file, "-o", base(file));
+  nom_cmd_append_many(&cmd, 8, "gcc", "-g", "-lm", "-lncurses", "../bin/miniaudio.o", file, "-o", base(file));
   nom_run_async(cmd);
 }
 
 void build_with_ui(char* file) {
   Nom_cmd cmd = {0};
-  nom_cmd_append_many(&cmd, 8, "gcc", "-lm", "-lncurses", "../bin/miniaudio.o", "ui.o", file, "-o", base(file));
+  nom_cmd_append_many(&cmd, 9, "gcc", "-g", "-lm", "-lncurses", "../bin/miniaudio.o", "ui.o", file, "-o", base(file));
   nom_run_async(cmd);
   nom_cmd_reset(&cmd);
   free(cmd.items);
@@ -42,7 +41,6 @@ void build_with_ui(char* file) {
 
 int main(int argc, char** argv) {
   rebuild(argc, argv, __FILE__, "gcc");
-  Nom_cmd cmd = {0};
   struct dirent* dirent;
   DIR* dir = opendir(".");
   bool remove_all = false;
@@ -63,7 +61,10 @@ int main(int argc, char** argv) {
         build_file(dirent->d_name);
       }
     } else if(ends_with(dirent->d_name, ".c")) {
-      remove(base(dirent->d_name));
+      char* dname = dirent->d_name;
+      if(strlen(dirent->d_name) >= 5 && dname[0] != 'b' && dname[1] != 'u' && dname[2] != 'i' && dname[3] != 'l' && dname[4] != 'd') {
+        remove(base(dirent->d_name));
+      }
       if(IS_PATH_EXIST("build.old")) {
         remove("build.old");
       }

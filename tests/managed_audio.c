@@ -1,14 +1,32 @@
 #include "common.h"
 #include "ui.h"
+#include <sys/stat.h>
 
 // TODO: add audio threading
-// make v1 UI
+// make v1 of the UI
 
-typedef struct Music {
-  bool looping;
+typedef struct Song {
   void* data_memory;
   ma_decoder decoder;
+  ma_decoder_config decoder_config;
+  ma_mutex mutex;
+  ma_bool8 is_ready;
+  float volume;     // 0..1
+  ma_bool8 playing; // no paused field because !playing means it is paused
+  ma_bool8 at_end;
+  ma_bool8 muted;
+  ma_bool8 looping;
+  ma_uint64 frame_count;
+} Song;
+
+typedef struct Music {
+  Song song;
+  long int frame_count;
+  void* data;
 } Music;
+
+// to stream audio, you can map the entire file into memory and only send chunks of that to be decoded, what takes the most time is decoding it
+// maybe use ma_resource_manager for streaming sound?
 
 typedef struct Audio {
   struct base {
@@ -163,6 +181,7 @@ void InitAudio(void) {
   audio.base.device_config.dataCallback = data_source_data_callback;
   audio.base.device_config.pUserData = NULL;
   result = ma_device_init(NULL, &audio.base.device_config, &audio.base.device);
+  ma_mutex_init(&audio.base.mutex);
   if(result != MA_SUCCESS) {
     printf("%s\n", ma_result_description(result));
     return;
@@ -203,28 +222,39 @@ Music LoadSong(char* filepath) {
   }
   long int length = 0;
   char* data = LoadFile(filepath, &length);
+  ma_result result = MA_SUCCESS;
   assert(length > 0);
   ma_decoder_config config = ma_decoder_config_init_default();
   audio.base.decoder_config = ma_decoder_config_init_default();
-  ma_decoder_init_memory(data, length, &audio.base.decoder_config, &audio.base.decoder);
+  result = ma_decoder_init_memory(data, length, &audio.base.decoder_config, &audio.base.decoder);
   audio.base.device.pUserData = &audio.base.decoder;
-  ma_uint64 song_length;
-  ma_decoder_get_length_in_pcm_frames(&audio.base.decoder, &song_length);
+  ma_uint64 song_length = 0;
+  result = ma_decoder_get_length_in_pcm_frames(&audio.base.decoder, &song_length);
   audio.base.frames_count = song_length;
   audio.internal.at_end = false;
+  assert(result == MA_SUCCESS);
+  assert(song_length > 0);
   return music;
   // ma_data_converter_process_pcm_frames()
   // ma_data_converter_init()
 }
 
-void PlaySound(Music music) {
+void PlaySound(void) {
   audio.internal.playing = MA_TRUE;
-  audio.internal.muted = MA_TRUE;
   ma_device_start(&audio.base.device);
 }
 
 void UnloadSong(Music song) {
   audio.base.decoder.pUserData = NULL;
+  audio.base.device.pUserData = NULL;
+  audio.base.cursor = 0;
+  audio.base.frames_count = 0;
+  audio.base.is_ready = false;
+  audio.internal.playing = false;
+  audio.time.seconds = 0;
+  audio.time.minutes = 0;
+  audio.time.frame_count = 0;
+  audio.time.total_seconds = 0;
 }
 
 float GetSongLengthInSeconds(void) {
@@ -249,40 +279,67 @@ float GetSongLengthInMinutes(void) {
 
 float SongTimePlayedInSeconds() {
   float secondsplayed = 0.0f;
-  ma_uint64 cursor;
+  ma_uint64 cursor = 0;
   ma_decoder_get_cursor_in_pcm_frames(&audio.base.decoder, &cursor);
   secondsplayed = (float)cursor / (float)audio.base.decoder.outputSampleRate;
   secondsplayed = (int)secondsplayed % 60;
   char* buff = calloc(1, 9);
   snprintf(buff, 9, "%d", (int)secondsplayed);
-  int cx = maxx() / 2;
-  int cy = maxy() / 2;
-  assert(cx < maxx() && cy < maxy());
+  int cx;
+  int cy;
+  getcenter(&cx, &cy);
   renderat(cx, cy, buff);
   return secondsplayed;
+}
+
+bool IS_PATH_FILE_AT(const int fd, const char* file) {
+  struct stat fi;
+  if(fstatat(fd, file, &fi, 0) == 0) {
+    if(fi.st_mode & S_IFREG) {
+      return true;
+    }
+  } else {
+    printf("errno %d\n", errno);
+    return false;
+  }
+  return false;
+}
+
+Nom_cmd LoadSongFromDir(char* dir) {
+  Nom_cmd cmd = {0};
+  struct dirent* dirent;
+  int fd = open(dir, O_DIRECTORY | O_RDONLY);
+  DIR* fdir = fdopendir(fd);
+  struct stat fi;
+  while((dirent = readdir(fdir))) {
+    char* dname = dirent->d_name;
+    if(strlen(dname) <= 2 && dname[0] == '.' || dname[1] == '.') {
+      continue;
+    }
+    char* buff = calloc(1, strlen(dname) + strlen(dir) + 2);
+    if(IS_PATH_FILE_AT(fd, dname)) {
+      strcat(buff, dir);
+      if(dname[strlen(dname) - 1] != '/') {
+        strcat(buff, "/");
+      }
+      strcat(buff, dname);
+      nom_cmd_append(&cmd, buff);
+    }
+    nom_log(NOM_INFO, "%s does not exist", buff);
+  }
+  assert(cmd.count > 0);
+  return cmd;
 }
 
 int main(void) {
   InitAudio();
   Nom_cmd cmd = {0};
-  struct dirent* dirent;
-  int fd = open("../stuff", O_DIRECTORY | O_RDONLY);
-  DIR* dir = fdopendir(fd);
-  chdir("../stuff");
+  cmd = LoadSongFromDir("../stuff");
   ncurses_init();
-  while((dirent = readdir(dir))) {
-    char* dname = dirent->d_name;
-    if(strlen(dname) <= 2 && dname[0] == '.' || dname[1] == '.') {
-      continue;
-    }
-    if(IS_PATH_FILE(dname)) {
-      nom_cmd_append(&cmd, dname);
-    }
-  }
   Music song = {0};
   long int index = 0;
   song = LoadSong(cmd.items[index]);
-  PlaySound(song);
+  PlaySound();
   bool should_close = false;
   while(!should_close) {
     int ch = getch();
@@ -311,7 +368,7 @@ int main(void) {
       }
       UnloadSong(song);
       song = LoadSong(cmd.items[index]);
-      PlaySound(song);
+      PlaySound();
       GetSongLengthInMinutes();
       ma_mutex_unlock(&audio.base.mutex);
       break;
@@ -333,7 +390,7 @@ int main(void) {
         index = 0;
       }
       song = LoadSong(cmd.items[index]);
-      PlaySound(song);
+      PlaySound();
       GetSongLengthInMinutes();
       ma_mutex_unlock(&audio.base.mutex);
     }

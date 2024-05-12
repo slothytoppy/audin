@@ -4,7 +4,6 @@ WINDOW* win = NULL;
 
 void ncurses_init(void) {
   win = initscr();
-  win = open_window();
   raw();
   noecho();
   keypad(win, true);
@@ -26,13 +25,11 @@ void ncurses_deinit(void) {
   noraw();
 }
 
-void renderat(int x, int y, char* fmt, ...) {
-  va_list ap;
-  va_start(ap, fmt);
+void renderat(int x, int y, char* fmt) {
+  assert(x <= maxx() && y <= maxy());
   move(y, x);
   deleteln();
   printw("%s", fmt);
-  va_end(ap);
   refresh();
 }
 
@@ -41,9 +38,25 @@ void clearat(int x, int y) {
   wdeleteln(win);
 }
 
+void clearscr(WINDOW* win) {
+  if(win == NULL) {
+    erase();
+  }
+  werase(win);
+}
+
 void rendervolume(Position pos, float volume) {
   char* buff = calloc(1, 9);
   snprintf(buff, 9, "%f", volume);
+  renderat(pos.x, pos.y, buff);
+  free(buff);
+}
+
+void renderseconds(int x, int y, int seconds) {
+  char* buff = calloc(1, 4);
+  snprintf(buff, 9, "%d", seconds);
+  renderat(x, y, buff);
+  free(buff);
 }
 
 void SetPos(Position* pos, int x, int y) {
@@ -58,4 +71,9 @@ int maxx(void) {
 
 int maxy(void) {
   return getmaxy(win);
+}
+
+void getcenter(int* x, int* y) {
+  *x = maxx() / 2;
+  *y = maxy() / 2;
 }

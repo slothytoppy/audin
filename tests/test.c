@@ -19,13 +19,14 @@ struct tag get_tag(char* filename) {
   int fd = open(filename, O_RDONLY);
   long unsigned int size = nom_get_fsize(filename);
   int length = 128;
-  char* file = calloc(1, 128 + 1);
-  // lseek(fd, 9, SEEK_SET);
-  for(int i = 0; i < 1000; i++) {
+  char* file = map_file_into_memory(filename);
+  for(int i = 0; file[i] != '/'; i++) {
+    file++;
     lseek(fd, i, SEEK_SET);
+  }
+  for(int i = 0; i < 128; i++) {
     read(fd, file, 1);
     printf("%s", file);
   }
-  fflush(stdout);
   return tag;
 }
