@@ -25,6 +25,17 @@ typedef struct Music {
   void* data;
 } Music;
 
+typedef struct UI {
+  bool help_shown;
+  bool main_menu;
+} UI;
+
+UI ui = {
+    .help_shown = false,
+    .main_menu = true,
+};
+
+// i wont do audio streaming yet, thats for after i have my own audio thread
 // to stream audio, you can map the entire file into memory and only send chunks of that to be decoded, what takes the most time is decoding it
 // maybe use ma_resource_manager for streaming sound?
 
@@ -113,6 +124,9 @@ bool SetDeviceVolume(float volume) {
 }
 
 bool SetVolume(float volume) {
+  if(audio.internal.muted == true) {
+    return false;
+  }
   if(volume <= 1.1f && volume > 0.0f) {
     SetInternalVolume(volume);
     SetDeviceVolume(volume);
@@ -171,6 +185,13 @@ void data_source_data_callback(ma_device* pDevice, void* pOutput, const void* pI
   ma_mutex_unlock(&audio.base.mutex);
 }
 
+typedef struct {
+  pthread_t thread;
+  pthread_attr_t attr;
+  pthread_mutex_t mutex;
+  pthread_cond_t cond;
+} audio_thread;
+
 void InitAudio(void) {
   ma_result result;
   audio.base.device_config = ma_device_config_init(ma_device_type_playback);
@@ -209,7 +230,6 @@ char* LoadFile(char* filepath, long int* length) {
     printf("FAILED\n");
     return NULL;
   }
-  ma_decoder_get_length_in_pcm_frames(&audio.base.decoder, &audio.base.frames_count);
 
   *length = data_len;
   return data;
@@ -228,12 +248,10 @@ Music LoadSong(char* filepath) {
   audio.base.decoder_config = ma_decoder_config_init_default();
   result = ma_decoder_init_memory(data, length, &audio.base.decoder_config, &audio.base.decoder);
   audio.base.device.pUserData = &audio.base.decoder;
-  ma_uint64 song_length = 0;
-  result = ma_decoder_get_length_in_pcm_frames(&audio.base.decoder, &song_length);
-  audio.base.frames_count = song_length;
+  result = ma_decoder_get_length_in_pcm_frames(&audio.base.decoder, &audio.base.frames_count);
   audio.internal.at_end = false;
   assert(result == MA_SUCCESS);
-  assert(song_length > 0);
+  assert(audio.base.frames_count > 0);
   return music;
   // ma_data_converter_process_pcm_frames()
   // ma_data_converter_init()
@@ -283,13 +301,92 @@ float SongTimePlayedInSeconds() {
   ma_decoder_get_cursor_in_pcm_frames(&audio.base.decoder, &cursor);
   secondsplayed = (float)cursor / (float)audio.base.decoder.outputSampleRate;
   secondsplayed = (int)secondsplayed % 60;
-  char* buff = calloc(1, 9);
-  snprintf(buff, 9, "%d", (int)secondsplayed);
+  return secondsplayed;
+}
+
+void RenderVolume(void) {
+  float volume = audio.internal.volume * 100;
+  char* buff = calloc(1, 5);
+  snprintf(buff, 5, "%d%%", (int)volume);
+  int cx, cy;
+  getcenter(&cx, &cy);
+  renderat(0, cy, buff);
+}
+
+char* renderminutesplayed(float seconds) {
+  char* buff = calloc(1, 2);
+  snprintf(buff, 2, "%d", (int)seconds / 60);
+  return buff;
+}
+
+char* rendersecondsplayed(void) {
+  int seconds = SongTimePlayedInSeconds();
+  char* buff = calloc(1, 4);
+  if(seconds < 10) {
+    snprintf(buff, 4, "0%d", (int)seconds);
+  } else {
+    snprintf(buff, 4, "%d", (int)seconds);
+  }
+  return buff;
+}
+
+char* rendertotalminutes(void) {
+  int minutes = audio.time.minutes;
+  char* buff = calloc(1, 2);
+  snprintf(buff, 2, "%d", minutes);
+  return buff;
+}
+
+char* rendertotalseconds(void) {
+  int seconds = audio.time.seconds;
+  int len = 3;
+  char* buff = calloc(1, len);
+  if(seconds < 10) {
+    buff[0] = '0';
+    buff[1] = '0' + seconds;
+    return buff;
+  }
+  snprintf(buff, len, "%d", seconds);
+  return buff;
+}
+
+void RenderPlayedTime() {
+  char* render = calloc(1, 255);
+  int seconds = SongTimePlayedInSeconds();
+  GetSongLengthInMinutes();
+  snprintf(render, 255, "%s:%s/%s:%s", renderminutesplayed(SongTimePlayedInSeconds()), rendersecondsplayed(), rendertotalminutes(), rendertotalseconds());
+  // 2:2:2/2:2:2
+  // hours isnt rendered unless it is there
   int cx;
   int cy;
   getcenter(&cx, &cy);
-  renderat(cx, cy, buff);
-  return secondsplayed;
+  renderat(cx, cy, render);
+}
+
+void RenderHelp(void) {
+  int x = 0, y = 0;
+  x = maxx() / 2 - 8;
+  y = maxy() / 2 - 4;
+  char* help[] = {
+      "'m' to mute",
+      "'p' or space to pause",
+      "'c' or down arrow for -10% volume",
+      "'y' or up arrow for +10% volume",
+      "'g' to skip to the end of the song",
+      "'s' to skip to the next song",
+      "'q' to quit the application",
+      "'?' or 'h' for toggling the help message"};
+  for(int i = 0; i < sizeof(help) / sizeof(help[0]); i++) {
+    renderat(x, y, help[i]);
+    y += 1;
+  }
+}
+
+void RenderUi(void) {
+  if(ui.main_menu == true) {
+    RenderVolume();
+    RenderPlayedTime();
+  }
 }
 
 bool IS_PATH_FILE_AT(const int fd, const char* file) {
@@ -377,11 +474,20 @@ int main(void) {
       break;
     case 'm':
       audio.internal.muted = !audio.internal.muted;
-      if(audio.internal.muted) {
+      if(!audio.internal.muted) {
         SetVolume(audio.internal.volume);
-      } else {
+      } else if(audio.internal.muted) {
         ma_device_set_master_volume(&audio.base.device, 0);
       }
+    case '?':
+    case 'h':
+      ui.help_shown = !ui.help_shown;
+      ui.main_menu = !ui.main_menu;
+      clear();
+      if(ui.help_shown == true) {
+        RenderHelp();
+      }
+      break;
     }
     if(AtSongEnd()) {
       ma_mutex_lock(&audio.base.mutex);
@@ -394,7 +500,9 @@ int main(void) {
       GetSongLengthInMinutes();
       ma_mutex_unlock(&audio.base.mutex);
     }
-    SongTimePlayedInSeconds();
+    if(ui.main_menu == true) {
+      RenderUi();
+    }
   }
   ncurses_deinit();
 }

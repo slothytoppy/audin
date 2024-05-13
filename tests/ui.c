@@ -26,11 +26,8 @@ void ncurses_deinit(void) {
 }
 
 void renderat(int x, int y, char* fmt) {
-  assert(x <= maxx() && y <= maxy());
-  move(y, x);
-  deleteln();
-  printw("%s", fmt);
-  refresh();
+  assert(x <= maxx() && y <= maxy() && x > -1 && y > -1);
+  mvprintw(y, x, "%s", fmt);
 }
 
 void clearat(int x, int y) {
