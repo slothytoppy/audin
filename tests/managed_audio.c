@@ -479,6 +479,7 @@ int main(void) {
       } else if(audio.internal.muted) {
         ma_device_set_master_volume(&audio.base.device, 0);
       }
+      break;
     case '?':
     case 'h':
       ui.help_shown = !ui.help_shown;
