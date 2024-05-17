@@ -15,8 +15,8 @@ typedef struct {
   unsigned char exit_keybinds_count;
 } keybinds;
 
-void open_ncurses(void);
-void close_ncurses(void);
+void init_ui(void);
+void deinit_ui(void);
 int maxx();
 int maxy();
 void renderat(int x, int y, char*);

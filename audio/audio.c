@@ -4,8 +4,8 @@
 Audio audio = {0};
 
 TA_PUBLIC void GoToSongEnd(void) {
-  ma_uint64 length = GetSongLength();
-  ma_decoder_seek_to_pcm_frame(&audio.decoder, length);
+  ma_decoder_seek_to_pcm_frame(&audio.decoder, audio.cursor);
+  audio.at_end = true;
 }
 
 TA_PUBLIC bool AtSongEnd() {
@@ -13,11 +13,17 @@ TA_PUBLIC bool AtSongEnd() {
     audio.at_end = true;
     return true;
   }
+  if(audio.at_end == true) {
+    return true;
+  }
   return false;
 }
 
 TA_PRIVATE void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount) {
   ma_data_source* pdatasource = (ma_data_source*)pDevice->pUserData;
+  ma_result result;
+  result = ma_decoder_get_cursor_in_pcm_frames(&audio.decoder, &audio.cursor);
+  assert(result == MA_SUCCESS);
   if(AtSongEnd()) {
     return;
   }
@@ -25,9 +31,7 @@ TA_PRIVATE void data_callback(ma_device* pDevice, void* pOutput, const void* pIn
     return;
   }
   ma_uint64 framesRead;
-  ma_result result = ma_data_source_read_pcm_frames(pdatasource, pOutput, frameCount, &framesRead);
-  assert(result == MA_SUCCESS);
-  result = ma_decoder_get_cursor_in_pcm_frames(&audio.decoder, &audio.cursor);
+  result = ma_data_source_read_pcm_frames(pdatasource, pOutput, frameCount, &framesRead);
   assert(result == MA_SUCCESS);
   if(frameCount != framesRead) {
     audio.at_end = true;
@@ -57,6 +61,7 @@ TA_PRIVATE void InitThread(thread* thread, callback callback, void* arg) {
   pthread_mutexattr_t attr;
   pthread_mutexattr_init(&attr);
   pthread_mutex_init(&thread->mutex, &attr);
+  audio.thread = *thread;
 }
 
 TA_PRIVATE void LockThread(thread thread) {
@@ -75,6 +80,13 @@ TA_PUBLIC unsigned long int GetSongLength(void) {
   ma_uint64 length;
   ma_result result = ma_decoder_get_length_in_pcm_frames(&audio.decoder, &length);
   return length;
+}
+
+TA_PRIVATE void ResetAudioFlags(void) {
+  audio.at_end = false;
+  audio.playing = false;
+  audio.length = 0;
+  audio.cursor = 0;
 }
 
 TA_PUBLIC void* PlaySong(void* filename) {
@@ -100,7 +112,12 @@ TA_PUBLIC void* PlaySong(void* filename) {
 void AsyncPlaySong(char* filename) {
   thread thread;
   InitThread(&thread, PlaySong, filename);
-  // this had stuff in it but it didnt do shit so i removed it
+  pthread_join(thread.thread, NULL);
+  audio.at_end = false;
+}
+
+void AsyncUnloadSong(void) {
+  ma_decoder_uninit(&audio.decoder);
 }
 
 TA_PUBLIC void SetVolume(float volume) {

@@ -4,7 +4,7 @@ UI ui = {0};
 
 keybinds keys = {0};
 
-void open_ncurses(void) {
+void init_ui(void) {
   initscr();
   raw();
   noecho();
@@ -15,7 +15,7 @@ void open_ncurses(void) {
   ui.maxx = getmaxx(stdscr);
 }
 
-void close_ncurses() {
+void deinit_ui(void) {
   curs_set(1);
   noraw();
   echo();
@@ -23,11 +23,11 @@ void close_ncurses() {
   endwin();
 }
 
-int maxx() {
+int maxx(void) {
   return ui.maxx;
 }
 
-int maxy() {
+int maxy(void) {
   return ui.maxy;
 }
 

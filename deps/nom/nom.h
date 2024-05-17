@@ -614,6 +614,9 @@ unsigned int rebuild1(char* file, char* compiler) {
     return 0;
   char* argv[] = {file, NULL};
   unsigned ret = rebuild(1, argv, file, compiler);
+  if(ret != true) {
+    exit(1);
+  }
   return ret;
 }
 

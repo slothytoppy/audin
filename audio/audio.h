@@ -47,9 +47,12 @@ typedef struct {
 TA_PUBLIC void InitAudio(void);
 TA_PRIVATE void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount);
 TA_PRIVATE void InitThread(thread* thread, callback callback, void* arg);
+TA_PRIVATE void LockThread(thread);
+TA_PRIVATE void UnlockThread(thread);
 /* void* return for LoadSong, and PlaySong is for threading reasons*/
 TA_PUBLIC void* PlaySong(void* filename);
 TA_PUBLIC void AsyncPlaySong(char* filename);
+TA_PUBLIC void AsyncUnloadSong();
 TA_PUBLIC bool AtSongEnd(void);
 TA_PUBLIC void GoToSongEnd(void);
 TA_PUBLIC void SetVolume(float);

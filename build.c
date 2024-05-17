@@ -12,15 +12,13 @@ void build_miniaudio(void) {
 }
 
 void build_audio(void) {
-  if(!IS_PATH_EXIST("./audio/audio.h")) {
-    nom_log(NOM_PANIC, "./audio/audio.h does not exist");
-    return;
+  if(needs_rebuild("./audio/audio.c", "./bin/audio.o")) {
+    Nom_cmd cmd = {0};
+    build_miniaudio();
+    nom_cmd_append_many(&cmd, 6, "gcc", "-g", "./audio/audio.c", "-c", "-o", "./bin/audio.o");
+    nom_run_sync(cmd);
+    nom_cmd_reset(&cmd);
   }
-  Nom_cmd cmd = {0};
-  build_miniaudio();
-  nom_cmd_append_many(&cmd, 6, "gcc", "-g", "./audio/audio.c", "-c", "-o", "./bin/audio.o");
-  nom_run_sync(cmd);
-  nom_cmd_reset(&cmd);
 }
 
 void build_ui(void) {
@@ -49,7 +47,13 @@ int main(int argc, char** argv) {
   if(!IS_PATH_EXIST("./bin")) {
     mkdir_if_not_exist("./bin");
   }
-  build_with_audio_and_ui("./test.c");
+  build_ui();
+  build_audio();
+  {
+    nom_cmd_append_many(&cmd, 11, "gcc", "-g", "-lm", "-lncurses", "./bin/audio.o", "./bin/miniaudio.o", "./bin/ui.o", "./queue/queue.c", "main.c", "-o", "main");
+    nom_run_sync(cmd);
+    nom_cmd_reset(&cmd);
+  }
 
   return 0;
 }
