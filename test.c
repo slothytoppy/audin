@@ -6,7 +6,7 @@
 int main(void) {
   open_ncurses();
   InitAudio();
-  SetVolume(0.3);
+  SetVolume(0.1);
   Nom_cmd cmd = {0};
   struct dirent* dirent;
   DIR* dir = opendir("./stuff/");
@@ -29,13 +29,19 @@ int main(void) {
     }
   }
   unsigned long cursor = 0;
+  // ??????????????????????/// maybe
   AsyncPlaySong("./stuff/Eminem - Parking Lot (Skit).mp3");
   key_append('q');
   while(!should_close()) {
     int ch = getch();
-    handle_exit_keys(ch);
+    if(ch != ERR) {
+      handle_exit_keys(ch);
+    }
     if(AtSongEnd()) {
       cursor += 1;
+      if(cursor > cmd.count - 1) {
+        cursor = 0;
+      }
       AsyncPlaySong(cmd.items[cursor]);
     }
   }

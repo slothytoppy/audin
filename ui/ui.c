@@ -10,6 +10,7 @@ void open_ncurses(void) {
   noecho();
   curs_set(0);
   keypad(stdscr, true);
+  nodelay(stdscr, true);
   ui.maxy = getmaxy(stdscr);
   ui.maxx = getmaxx(stdscr);
 }

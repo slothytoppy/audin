@@ -9,7 +9,7 @@ TA_PUBLIC void GoToSongEnd(void) {
 }
 
 TA_PUBLIC bool AtSongEnd() {
-  if(audio.cursor > 0 && audio.length > 0 && audio.cursor == audio.length) {
+  if(audio.cursor > 0 && audio.cursor == audio.length) {
     audio.at_end = true;
     return true;
   }
@@ -90,6 +90,7 @@ TA_PUBLIC void* PlaySong(void* filename) {
   ma_decoder_config config = ma_decoder_config_init_default();
   ma_result result;
   result = ma_decoder_init_memory(audio.audio_data.data, audio.audio_data.len, &config, &audio.decoder);
+  audio.length = GetSongLength();
   assert(result == MA_SUCCESS);
   audio.device.pUserData = &audio.decoder;
   audio.playing = true;
@@ -99,7 +100,7 @@ TA_PUBLIC void* PlaySong(void* filename) {
 void AsyncPlaySong(char* filename) {
   thread thread;
   InitThread(&thread, PlaySong, filename);
-  pthread_join(thread.thread, NULL);
+  // this had stuff in it but it didnt do shit so i removed it
 }
 
 TA_PUBLIC void SetVolume(float volume) {
