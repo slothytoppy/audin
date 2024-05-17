@@ -308,7 +308,7 @@ char* base(const char* file) {
   char* retStr = strdup(file);
   char* lastExt;
   if(retStr[0] == '.' && retStr[1] == '/') {
-    retStr += 1;
+    retStr += 2;
   }
   lastExt = strrchr(retStr, '.');
   if(lastExt != NULL)
@@ -504,7 +504,7 @@ bool needs_rebuild(char* source_file, char* old_file) {
     return false;
   }
   if(!IS_PATH_EXIST(source_file) || !IS_PATH_EXIST(old_file)) {
-    return false;
+    return true;
   }
   long int source_time = nom_get_mtime(source_file);
   long int old_time = nom_get_mtime(old_file);

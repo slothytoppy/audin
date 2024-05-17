@@ -1,27 +1,27 @@
 #define MINIAUDIO_IMPLEMENTATION
-#include "./deps/miniaudio/extras/miniaudio_split/miniaudio.h"
+#include "./deps/miniaudio.h"
 #include "./deps/nom/nom.h"
+#include <assert.h>
 #include <ncurses.h>
 #include <sys/time.h>
 
+typedef void* (*callback)(void*);
+
+typedef struct {
+  pthread_t thread;
+  pthread_attr_t attr;
+  pthread_mutex_t mutex;
+  callback callback;
+  void* arg;
+} thread;
+
 typedef struct {
   ma_device device;
-  ma_engine engine;
-  ma_sound sound;
+  ma_context ctx;
   ma_decoder decoder;
-  ma_device_config device_config;
-  ma_engine_config engine_config;
-  ma_sound_config sound_config;
-  ma_decoder_config decoder_config;
-  ma_backend ma_backend;
-  float volume;
-  long int frames;
-  ma_device_data_proc data_callback;
-  ma_result result;
-  void* music_data;
 } Audio;
 
-Audio audio;
+Audio audio = {0};
 
 void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount) {
   ma_decoder* pDecoder = (ma_decoder*)pDevice->pUserData;
@@ -34,78 +34,80 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
   (void)pInput;
 }
 
-typedef struct {
-  char* SongData;
-  long int SongSize;
-} SongInfo;
-
-bool LoadSongFromMemory(char* file, SongInfo* song) {
-  struct stat fi;
-  int fd = open(file, O_RDONLY);
-  if(fd < 0 || stat(file, &fi) < 0) {
-    return false;
-  }
-  song->SongData = mmap(song->SongData, fi.st_size, PROT_READ, MAP_SHARED, fd, 0);
-  if(song->SongData == MAP_FAILED) {
-    song->SongData = NULL;
-    song->SongSize = 0;
-    return false;
-  }
-  song->SongSize = fi.st_size;
-  return true;
-}
-
-bool InitDevice() {
-  SongInfo data = {0};
-  if(LoadSongFromMemory("./stuff/Gorillaz - Baby Queen.mp3", &data) == false) {
-    return false;
-  }
-  audio.result = ma_decoder_init_memory(data.SongData, data.SongSize, &audio.decoder_config, &audio.decoder);
-  audio.device_config = ma_device_config_init(ma_device_type_playback);
-  audio.device_config.playback.format = audio.decoder.outputFormat;
-  audio.device_config.playback.channels = audio.decoder.outputChannels;
-  audio.device_config.sampleRate = audio.decoder.outputSampleRate;
-  audio.device_config.dataCallback = data_callback;
-  audio.device_config.pUserData = &audio.decoder;
-  if(audio.result != MA_SUCCESS) {
-    return false;
-  }
-  return true;
+void InitThread(thread* thread, callback callback, void* arg) {
+  pthread_attr_init(&thread->attr);
+  pthread_create(&thread->thread, &thread->attr, callback, arg);
+  pthread_mutexattr_t mattr;
+  pthread_mutexattr_init(&mattr);
+  pthread_mutex_init(&thread->mutex, &mattr);
 }
 
 bool InitAudio() {
-  InitDevice();
-  if(ma_device_init(NULL, &audio.device_config, &audio.device) != MA_SUCCESS) {
-    goto failure;
-  }
-  if(ma_device_start(&audio.device) != MA_SUCCESS) {
-    ma_device_uninit(&audio.device);
-    goto failure;
-  }
-
-failure:
-  ma_decoder_uninit(&audio.decoder);
+  ma_device_config device_config = ma_device_config_init(ma_device_type_playback);
+  device_config.playback.format = ma_format_f32;
+  device_config.playback.channels = 2;
+  device_config.sampleRate = 0;
+  device_config.dataCallback = data_callback;
+  device_config.pUserData = NULL;
+  ma_result result;
+  result = ma_device_init(NULL, &device_config, &audio.device);
+  assert(result == MA_SUCCESS);
+  result = ma_device_start(&audio.device);
+  assert(result == MA_SUCCESS);
   return true;
+}
+
+void* PlaySong(void* filename) {
+  ma_decoder_config config = ma_decoder_config_init_default();
+  ma_result result = ma_decoder_init_file(filename, &config, &audio.decoder);
+  assert(result == MA_SUCCESS);
+  assert(audio.decoder.outputSampleRate > 0);
+  audio.device.pUserData = &audio.decoder;
+  return NULL;
+}
+
+void AsyncPlaySong(char* filename) {
+  thread thread = {0};
+  InitThread(&thread, PlaySong, filename);
+  pthread_join(thread.thread, NULL);
 }
 
 int main(int argc, char** argv) {
   initscr();
-  noecho();
   raw();
-  bool should_close = false;
+  noecho();
   InitAudio();
-  while(!should_close) {
-    char ch = getch();
-    switch(ch) {
-    case 'r': {
-      exit(1);
-      break;
+  Nom_cmd queue = {0};
+  struct dirent* dirent;
+  DIR* dir = opendir("../stuff/");
+  while((dirent = readdir(dir))) {
+    char* dname = dirent->d_name;
+    if(strlen(dname) <= 2 && dname[0] == '.' || dname[1] == '.') {
+      continue;
     }
+    char* buff = calloc(1, 4096);
+    strcat(buff, "../stuff/");
+    strcat(buff, dname);
+    nom_cmd_append(&queue, buff);
+  }
+  ma_device_set_master_volume(&audio.device, 0.3);
+  bool should_close = false;
+  AsyncPlaySong("./stuff/Disturbed - Down with the Sickness.mp3");
+  int ch;
+  while(should_close != true) {
+    ch = getch();
+    switch(ch) {
     case 'q':
       should_close = true;
-      exit(0);
+      noraw();
+      echo();
+      endwin();
       break;
+    default:
     }
   }
+  noraw();
+  echo();
+  endwin();
   return 0;
 }
