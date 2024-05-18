@@ -75,8 +75,7 @@ int main(void) {
   char* current_song = queue.items[queue.cursor];
   AsyncPlaySong(queue.items[queue.cursor]);
   key_append('q');
-  float volume = 0.5f;
-  bool muted = false;
+  float volume = GetVolume();
   while(should_close() != true) {
     int ch = getch();
     if(ch != ERR) {
@@ -99,12 +98,7 @@ int main(void) {
         SetVolume(volume);
         break;
       case 'm':
-        muted = !muted;
-        if(!muted) {
-          SetVolume(0);
-        } else {
-          SetVolume(volume);
-        }
+        ToggleMute();
         break;
       case 'p':
         TogglePause();

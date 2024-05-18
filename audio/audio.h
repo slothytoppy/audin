@@ -29,7 +29,8 @@ typedef struct {
   bool is_initialized;
   bool at_end;
   bool playing;
-  bool volume;
+  float volume;
+  bool muted;
   struct {
     ma_uint64 cursor;
     ma_uint64 length;
@@ -56,7 +57,11 @@ TA_PUBLIC void AsyncUnloadSong(void);
 TA_PUBLIC void TogglePause(void);
 TA_PUBLIC bool AtSongEnd(void);
 TA_PUBLIC void GoToSongEnd(void);
-TA_PUBLIC void SetVolume(float);
+TA_PUBLIC void SetDeviceVolume(float); // sets the device volume without setting the internal volume
+TA_PUBLIC void SetVolume(float);       // sets device volume and sets the internal volume
 TA_PUBLIC float GetVolume(void);
+TA_PUBLIC void ToggleMute(void);
+TA_PUBLIC bool IsMuted(void);
+TA_PUBLIC bool IsAudioReady(void);
 TA_PUBLIC unsigned long int GetSongLength(void);
 #endif // AUDIO_H
