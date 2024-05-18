@@ -52,7 +52,8 @@ TA_PRIVATE void UnlockThread(thread);
 /* void* return for LoadSong, and PlaySong is for threading reasons*/
 TA_PUBLIC void* PlaySong(void* filename);
 TA_PUBLIC void AsyncPlaySong(char* filename);
-TA_PUBLIC void AsyncUnloadSong();
+TA_PUBLIC void AsyncUnloadSong(void);
+TA_PUBLIC void TogglePause(void);
 TA_PUBLIC bool AtSongEnd(void);
 TA_PUBLIC void GoToSongEnd(void);
 TA_PUBLIC void SetVolume(float);

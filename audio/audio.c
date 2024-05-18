@@ -9,11 +9,8 @@ TA_PUBLIC void GoToSongEnd(void) {
 }
 
 TA_PUBLIC bool AtSongEnd() {
-  if(audio.cursor > 0 && audio.cursor == audio.length) {
+  if(audio.at_end == true || audio.cursor > 0 && audio.cursor == audio.length) {
     audio.at_end = true;
-    return true;
-  }
-  if(audio.at_end == true) {
     return true;
   }
   return false;
@@ -106,6 +103,8 @@ TA_PUBLIC void* PlaySong(void* filename) {
   assert(result == MA_SUCCESS);
   audio.device.pUserData = &audio.decoder;
   audio.playing = true;
+  audio.at_end = false;
+  SetVolume(0.5f);
   return NULL;
 }
 
@@ -113,18 +112,33 @@ void AsyncPlaySong(char* filename) {
   thread thread;
   InitThread(&thread, PlaySong, filename);
   pthread_join(thread.thread, NULL);
-  audio.at_end = false;
 }
 
 void AsyncUnloadSong(void) {
-  ma_decoder_uninit(&audio.decoder);
+  int res = munmap(audio.audio_data.data, audio.audio_data.len);
+  assert(res == 0);
+  ma_result result = ma_decoder_uninit(&audio.decoder);
+  assert(result == MA_SUCCESS);
+}
+
+void TogglePause(void) {
+  audio.playing = !audio.playing;
+}
+
+TA_PRIVATE bool AudioWithinRange(float volume) {
+  if(volume <= 1.0 && volume >= 0.0) {
+    return true;
+  }
+  return false;
 }
 
 TA_PUBLIC void SetVolume(float volume) {
   assert(IsAudioReady() == true);
-  ma_result result = ma_device_set_master_volume(&audio.device, volume);
-  assert(result == MA_SUCCESS);
-  audio.volume = volume;
+  if(AudioWithinRange(volume)) {
+    ma_result result = ma_device_set_master_volume(&audio.device, volume);
+    assert(result == MA_SUCCESS);
+    audio.volume = volume;
+  }
 }
 
 TA_PUBLIC float GetVolume(void) {

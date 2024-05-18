@@ -41,7 +41,7 @@ void DecQueueCursor(Queue* queue) {
 }
 
 void IncQueueCursor(Queue* queue) {
-  if(queue->cursor + 1 > queue->count) {
+  if(queue->cursor >= queue->count) {
     queue->cursor = 0;
   } else {
     queue->cursor += 1;
@@ -50,12 +50,12 @@ void IncQueueCursor(Queue* queue) {
 
 void PlayPreviousSong(Queue* queue) {
   DecQueueCursor(queue);
-  PlaySong(queue->items[queue->cursor]);
+  AsyncPlaySong(queue->items[queue->cursor]);
 }
 
 void PlayNextSong(Queue* queue) {
   IncQueueCursor(queue);
-  PlaySong(queue->items[queue->cursor]);
+  AsyncPlaySong(queue->items[queue->cursor]);
 }
 
 void queue_is_not_null(Queue q) {
@@ -75,26 +75,45 @@ int main(void) {
   char* current_song = queue.items[queue.cursor];
   AsyncPlaySong(queue.items[queue.cursor]);
   key_append('q');
+  float volume = 0.5f;
+  bool muted = false;
   while(should_close() != true) {
     int ch = getch();
     if(ch != ERR) {
       handle_exit_keys(ch);
       switch(ch) {
       case 'a':
+        AsyncUnloadSong();
         PlayPreviousSong(&queue);
         break;
       case 'd':
+        AsyncUnloadSong();
         PlayNextSong(&queue);
+        break;
+      case 'c':
+        volume -= 0.1f;
+        SetVolume(volume);
+        break;
+      case 'v':
+        volume += 0.1f;
+        SetVolume(volume);
+        break;
+      case 'm':
+        muted = !muted;
+        if(!muted) {
+          SetVolume(0);
+        } else {
+          SetVolume(volume);
+        }
+        break;
+      case 'p':
+        TogglePause();
         break;
       }
     }
     if(AtSongEnd()) {
-      queue.cursor += 1;
-      if(queue.cursor > queue.count) {
-        queue.cursor = 0;
-      }
       AsyncUnloadSong();
-      PlaySong(queue.items[queue.cursor]);
+      PlayNextSong(&queue);
     }
   }
   deinit_ui();
