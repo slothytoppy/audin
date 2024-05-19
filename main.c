@@ -41,7 +41,7 @@ void DecQueueCursor(Queue* queue) {
 }
 
 void IncQueueCursor(Queue* queue) {
-  if(queue->cursor >= queue->count) {
+  if(queue->cursor >= queue->count - 1) {
     queue->cursor = 0;
   } else {
     queue->cursor += 1;
@@ -100,6 +100,7 @@ int main(void) {
       case 'm':
         ToggleMute();
         break;
+      case ' ':
       case 'p':
         TogglePause();
         break;

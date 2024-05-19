@@ -19,9 +19,7 @@ TA_PUBLIC bool AtSongEnd() {
 
 TA_PRIVATE void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount) {
   ma_data_source* pdatasource = (ma_data_source*)pDevice->pUserData;
-  ma_result result;
-  result = ma_decoder_get_cursor_in_pcm_frames(&audio.decoder, &audio.cursor);
-  assert(result == MA_SUCCESS);
+  ma_result result = MA_ERROR;
   if(AtSongEnd()) {
     return;
   }
@@ -30,6 +28,8 @@ TA_PRIVATE void data_callback(ma_device* pDevice, void* pOutput, const void* pIn
   }
   ma_uint64 framesRead;
   result = ma_data_source_read_pcm_frames(pdatasource, pOutput, frameCount, &framesRead);
+  assert(result == MA_SUCCESS);
+  result = ma_decoder_get_cursor_in_pcm_frames(&audio.decoder, &audio.cursor);
   assert(result == MA_SUCCESS);
   if(frameCount != framesRead) {
     audio.at_end = true;
