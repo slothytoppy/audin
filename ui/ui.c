@@ -20,6 +20,7 @@ void deinit_ui(void) {
   noraw();
   echo();
   keypad(stdscr, false);
+  nodelay(stdscr, false);
   endwin();
 }
 

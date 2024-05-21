@@ -35,13 +35,7 @@ typedef struct {
     ma_uint64 cursor;
     ma_uint64 length;
   };
-  struct audio_info {
-    unsigned short seconds;
-  } audio_info;
-  struct audio_data {
-    void* data;
-    unsigned long len;
-  } audio_data;
+  char* song_name;
   thread thread;
 } Audio;
 
@@ -64,4 +58,13 @@ TA_PUBLIC void ToggleMute(void);
 TA_PUBLIC bool IsMuted(void);
 TA_PUBLIC bool IsAudioReady(void);
 TA_PUBLIC unsigned long int GetSongLength(void);
+TA_PUBLIC unsigned long int GetSongLengthInSeconds(void);
+TA_PUBLIC unsigned long int GetSongPlayedTime(void);
+TA_PUBLIC unsigned long int GetSongPlayedTimeInSeconds(void);
+TA_PUBLIC bool SeekToFrame(unsigned long int);
+TA_PUBLIC void SeekToSecond(unsigned long int);
+TA_PUBLIC unsigned long int GetCursor();
+TA_PUBLIC unsigned long int GetSampleRate();
+TA_PUBLIC void Log(char*, ...);
+
 #endif // AUDIO_H

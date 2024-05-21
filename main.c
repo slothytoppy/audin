@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/time.h>
+#include <unistd.h>
 
 void init_queue(Queue* queue, char* dirpath) {
   struct dirent* dirent;
@@ -15,15 +16,15 @@ void init_queue(Queue* queue, char* dirpath) {
   assert(dir != NULL);
   while((dirent = readdir(dir))) {
     char* dname = dirent->d_name;
+    if(strlen(dname) <= 2 && dname[0] == '.' || dname[1] == '.') {
+      continue;
+    }
     char* buffer = calloc(1, 4096);
     strcat(buffer, dirpath);
     if(buffer[strlen(buffer) - 1] != '/') {
       strcat(buffer, "/");
     }
     strcat(buffer, dname);
-    if(strlen(dname) <= 2 && dname[0] == '.' || dname[1] == '.') {
-      continue;
-    }
     int result = stat(buffer, &fi);
     assert(result == 0);
     if(fi.st_mode & S_IFREG) {
@@ -33,7 +34,7 @@ void init_queue(Queue* queue, char* dirpath) {
 }
 
 void DecQueueCursor(Queue* queue) {
-  if(queue->cursor - 1 < 0) {
+  if(queue->cursor - 1 <= 0) {
     queue->cursor += 1;
   } else {
     queue->cursor -= 1;
@@ -41,7 +42,7 @@ void DecQueueCursor(Queue* queue) {
 }
 
 void IncQueueCursor(Queue* queue) {
-  if(queue->cursor >= queue->count - 1) {
+  if(queue->cursor + 1 >= queue->count - 1) {
     queue->cursor = 0;
   } else {
     queue->cursor += 1;
@@ -65,15 +66,48 @@ void queue_is_not_null(Queue q) {
   }
 }
 
+void render_volume(float volume) {
+  char* msg = calloc(1, 9);
+  snprintf(msg, 9, "%f", volume);
+  renderat(maxx() / 2, maxy() / 2, msg);
+  free(msg);
+}
+
+void render_length(void) {
+  char* msg = calloc(1, 16);
+  snprintf(msg, 256, "%lu/%lu", GetSongPlayedTimeInSeconds(), GetSongLengthInSeconds());
+  renderat(maxx() / 2, maxy() / 2 - 1, msg);
+  free(msg);
+}
+
+void render_song_name(Queue queue) {
+  renderat(maxx() / 2, maxy() / 2 - 2, queue.items[queue.cursor]);
+}
+
+void render_queue(Queue q) {
+  char* msg = calloc(1, 4096);
+  for(int i = 0; i < q.count; i++) {
+    if(q.items[i] == NULL) {
+      continue;
+    }
+    strcat(msg, q.items[i]);
+    strcat(msg, "\n");
+  }
+  renderat(0, 0, msg);
+}
+
 int main(void) {
   InitAudio();
   init_ui();
-  SetVolume(0.3);
+  SetVolume(0.5);
   Queue queue;
   queue_init(&queue);
   init_queue(&queue, "./stuff/");
+  for(int i = 0; i < queue.count; i++) {
+    Log("queue item:%d %s\n", i, queue.items[i]);
+  }
   char* current_song = queue.items[queue.cursor];
-  AsyncPlaySong(queue.items[queue.cursor]);
+  AsyncPlaySong(current_song);
   key_append('q');
   float volume = GetVolume();
   while(should_close() != true) {
@@ -82,32 +116,48 @@ int main(void) {
       handle_exit_keys(ch);
       switch(ch) {
       case 'a':
-        AsyncUnloadSong();
         PlayPreviousSong(&queue);
         break;
       case 'd':
-        AsyncUnloadSong();
         PlayNextSong(&queue);
+        break;
+      case 'q':
+        break;
+        if(GetSongPlayedTimeInSeconds() > 5) {
+          SeekToSecond(GetSongPlayedTimeInSeconds() - 5);
+        }
+      case 'e':
+        break;
+        Log("song length: %llu\n", GetSongLengthInSeconds());
+        Log("old played time: %llu\n", GetSongPlayedTimeInSeconds());
+        // if(GetSongPlayedTimeInSeconds() + 5 < GetSongLengthInSeconds()) {
+        SeekToSecond(GetSongPlayedTimeInSeconds() + 5);
+        // }
+        Log("new played time: %llu\n", GetSongPlayedTimeInSeconds());
         break;
       case 'c':
         volume -= 0.1f;
+        if(volume < 0.0f) {
+          volume += 0.1f;
+        }
         SetVolume(volume);
         break;
       case 'v':
+        if(volume > 1.0f) {
+          volume -= 0.1f;
+        }
         volume += 0.1f;
         SetVolume(volume);
         break;
       case 'm':
         ToggleMute();
         break;
-      case ' ':
       case 'p':
         TogglePause();
         break;
       }
     }
     if(AtSongEnd()) {
-      AsyncUnloadSong();
       PlayNextSong(&queue);
     }
   }

@@ -1,11 +1,22 @@
 #include "./audio.h"
 #include <stdio.h>
+#include <stdlib.h>
 
 Audio audio = {0};
 
+__attribute__((format(printf, 1, 2))) TA_PUBLIC void Log(char* msg, ...) {
+  FILE* fp = fopen("log", "a+");
+  va_list args;
+  va_start(args, msg);
+  vfprintf(fp, msg, args);
+  va_end(args);
+  fclose(fp);
+}
+
 TA_PUBLIC void GoToSongEnd(void) {
   assert(IsAudioReady() == true);
-  ma_decoder_seek_to_pcm_frame(&audio.decoder, audio.cursor);
+  ma_result result = ma_decoder_seek_to_pcm_frame(&audio.decoder, audio.length);
+  assert(result == MA_SUCCESS);
   audio.at_end = true;
 }
 
@@ -26,15 +37,11 @@ TA_PRIVATE void data_callback(ma_device* pDevice, void* pOutput, const void* pIn
   if(audio.playing == MA_FALSE) {
     return;
   }
-  ma_uint64 framesRead;
+  ma_uint64 framesRead = 0;
   result = ma_data_source_read_pcm_frames(pdatasource, pOutput, frameCount, &framesRead);
   assert(result == MA_SUCCESS);
   result = ma_decoder_get_cursor_in_pcm_frames(&audio.decoder, &audio.cursor);
   assert(result == MA_SUCCESS);
-  if(frameCount != framesRead) {
-    audio.at_end = true;
-  }
-
   (void)pInput;
 }
 
@@ -80,37 +87,74 @@ TA_PUBLIC bool IsAudioReady(void) {
 
 TA_PUBLIC unsigned long int GetSongLength(void) {
   assert(IsAudioReady() == true);
-  ma_uint64 length;
+  ma_uint64 length = 0;
   ma_result result = ma_decoder_get_length_in_pcm_frames(&audio.decoder, &length);
+  if(result != MA_SUCCESS) {
+    Log("song:%s error %d:%s\n", audio.song_name, result, ma_result_description(result));
+    exit(1);
+  }
+  assert(result == MA_SUCCESS);
   return length;
 }
 
-TA_PRIVATE void ResetAudioFlags(void) {
-  assert(IsAudioReady() == true);
-  audio.at_end = false;
-  audio.playing = false;
-  audio.length = 0;
-  audio.cursor = 0;
+TA_PUBLIC unsigned long int GetSongLengthInSeconds(void) {
+  ma_uint64 length = GetSongLength() / audio.decoder.outputSampleRate;
+  return length;
 }
+
+TA_PUBLIC unsigned long int GetSampleRate(void) {
+  return audio.decoder.outputSampleRate;
+}
+
+TA_PUBLIC unsigned long int GetSongPlayedTime(void) {
+  assert(IsAudioReady() == true);
+  return audio.cursor;
+}
+
+TA_PUBLIC unsigned long int GetSongPlayedTimeInSeconds(void) {
+  ma_uint64 length = GetSongPlayedTime() / audio.decoder.outputSampleRate;
+  return length % 60;
+}
+
+TA_PUBLIC unsigned long int GetCursor(void) {
+  return GetSongPlayedTime();
+}
+
+TA_PUBLIC bool SeekToFrame(unsigned long int frame) {
+  ma_result result = ma_decoder_seek_to_pcm_frame(&audio.decoder, frame);
+  audio.cursor = frame;
+  return result;
+}
+
+TA_PUBLIC void SeekToSecond(unsigned long seconds) {
+  unsigned long frame = audio.decoder.outputSampleRate * (ma_uint64)seconds;
+  assert(frame <= audio.length);
+  Log("second %lu frames %lu\n", (unsigned long)seconds, frame);
+  // ma_mix_pcm_frames_f32()
+  SeekToFrame(frame);
+  return;
+}
+
+/*
+TA_PUBLIC void SeekToSecond(unsigned long seconds) {
+  thread thread;
+  InitThread(&thread, _SeekToSecond, (void*)seconds);
+  pthread_join(thread.thread, NULL);
+}
+*/
 
 TA_PUBLIC void* PlaySong(void* filename) {
   assert(IsAudioReady() == true);
-  int fd = open(filename, O_RDONLY);
-  struct stat fi;
-  if(stat(filename, &fi) < 0) {
-    return false;
-  }
-  audio.audio_data.data = mmap(audio.audio_data.data, fi.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-  audio.audio_data.len = fi.st_size;
-  assert(audio.audio_data.data != MAP_FAILED);
   ma_decoder_config config = ma_decoder_config_init_default();
-  ma_result result;
-  result = ma_decoder_init_memory(audio.audio_data.data, audio.audio_data.len, &config, &audio.decoder);
-  audio.length = GetSongLength();
+  ma_result result = ma_decoder_init_file(filename, &config, &audio.decoder);
+  if(result != MA_SUCCESS) {
+    Log("PlaySong %d:%s\n", result, ma_result_description(result));
+  }
   assert(result == MA_SUCCESS);
+  audio.length = GetSongLength();
   audio.device.pUserData = &audio.decoder;
   audio.playing = true;
-  audio.at_end = false;
+  audio.song_name = filename;
   return NULL;
 }
 
@@ -118,14 +162,11 @@ void AsyncPlaySong(char* filename) {
   assert(IsAudioReady() == true);
   thread thread;
   InitThread(&thread, PlaySong, filename);
-  pthread_join(thread.thread, NULL);
   audio.thread = thread;
 }
 
 void AsyncUnloadSong(void) {
   assert(IsAudioReady() == true);
-  int res = munmap(audio.audio_data.data, audio.audio_data.len);
-  assert(res == 0);
   ma_result result = ma_decoder_uninit(&audio.decoder);
   assert(result == MA_SUCCESS);
 }
@@ -139,15 +180,11 @@ void ToggleMute(void) {
   assert(IsAudioReady() == true);
   // assert(0 && "TODO: fix muting messing with volume");
   audio.muted = !audio.muted;
-  FILE* fp = fopen("./log", "a+");
   if(!audio.muted) {
     SetVolume(audio.volume);
-    fprintf(fp, "%f\n", audio.volume);
   } else {
     SetDeviceVolume(0);
-    fprintf(fp, "0\n");
   }
-  fclose(fp);
 }
 
 bool IsMuted(void) {
@@ -167,18 +204,15 @@ TA_PRIVATE bool AudioWithinRange(float volume) {
 
 TA_PUBLIC void SetDeviceVolume(float volume) {
   assert(IsAudioReady() == true);
-  if(AudioWithinRange(volume)) {
-    ma_result result = ma_device_set_master_volume(&audio.device, volume);
-    assert(result == MA_SUCCESS);
-  }
+  ma_result result = ma_device_set_master_volume(&audio.device, volume);
+  assert(result == MA_SUCCESS);
 }
 
 TA_PUBLIC void SetVolume(float volume) {
   assert(IsAudioReady() == true);
-  if(AudioWithinRange(volume)) {
-    ma_device_set_master_volume(&audio.device, volume);
-    audio.volume = volume;
-  }
+  ma_result result = ma_device_set_master_volume(&audio.device, volume);
+  assert(result == MA_SUCCESS);
+  audio.volume = volume;
 }
 
 TA_PUBLIC float GetVolume(void) {
