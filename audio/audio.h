@@ -35,6 +35,7 @@ typedef struct {
     ma_uint64 cursor;
     ma_uint64 length;
   };
+  char* song_name;
   thread thread;
   char* filename;
   Queue queue;
@@ -59,6 +60,10 @@ TA_PUBLIC void toggle_mute(void);
 TA_PUBLIC bool is_muted(void);
 TA_PUBLIC bool is_audio_ready(void);
 TA_PUBLIC unsigned long int get_song_length(void);
+TA_PUBLIC unsigned long int get_song_length_in_seconds(void);
+TA_PUBLIC unsigned long int get_song_time_played(void);
+TA_PUBLIC unsigned long int get_song_time_played_in_seconds(void);
+TA_PUBLIC void seek_to_second(unsigned long int);
 TA_PUBLIC void Log(char* fmt, ...);
 // queue
 TA_PUBLIC bool queue_read_dir(Queue* queue, char* dirpath);
@@ -68,4 +73,5 @@ TA_PUBLIC unsigned long long get_queue_cursor(void);
 TA_PUBLIC bool set_queue_cursor(unsigned long long);
 TA_PUBLIC char* get_song_name(void);
 TA_PUBLIC bool reset_queue(Queue* queue);
+
 #endif // AUDIO_H

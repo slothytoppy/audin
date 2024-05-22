@@ -12,17 +12,15 @@ void go_to_song_end(void) {
   if(result != MA_SUCCESS) {
     Log("failed to seek to %llu with error %s\n", audio.length, ma_result_description(result));
   }
-  assert(result == MA_SUCCESS);
-  audio.at_end = true;
 }
 
-__attribute__((format(printf, 1, 2))) void Log(char* fmt, ...) {
+__attribute__((format(printf, 1, 2))) TA_PUBLIC void Log(char* msg, ...) {
+  FILE* fp = fopen("log", "a+");
   va_list args;
-  va_start(args, fmt);
-  FILE* fp = fopen("./log", "a+");
-  vfprintf(fp, fmt, args);
-  fclose(fp);
+  va_start(args, msg);
+  vfprintf(fp, msg, args);
   va_end(args);
+  fclose(fp);
 }
 
 bool at_song_end() {
@@ -54,10 +52,6 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
     Log("failed to get cursor in pcm frames in data callback, cursor: %llu error %s\n", audio.cursor, ma_result_description(result));
   }
   assert(result == MA_SUCCESS);
-  if(frameCount != framesRead) {
-    audio.at_end = true;
-  }
-
   (void)pInput;
 }
 
@@ -132,11 +126,53 @@ void* play_song(void* filename) {
   }
   assert(result == MA_SUCCESS);
   audio.length = get_song_length();
-  audio.device.pUserData = &audio.decoder;
-  audio.playing = true;
-  audio.at_end = false;
-  return NULL;
 }
+
+TA_PUBLIC unsigned long int get_song_length_in_seconds(void) {
+  ma_uint64 length = get_song_length() / audio.decoder.outputSampleRate;
+  return length;
+}
+
+TA_PUBLIC unsigned long int get_sample_rate(void) {
+  return audio.decoder.outputSampleRate;
+}
+
+TA_PUBLIC unsigned long int get_song_time_played(void) {
+  assert(is_audio_ready() == true);
+  return audio.cursor;
+}
+
+TA_PUBLIC unsigned long int get_song_time_played_in_seconds(void) {
+  ma_uint64 length = get_song_time_played() / audio.decoder.outputSampleRate;
+  return length % 60;
+}
+
+TA_PUBLIC unsigned long int get_cursor(void) {
+  return get_song_time_played();
+}
+
+TA_PUBLIC bool seek_to_frame(unsigned long int frame) {
+  ma_result result = ma_decoder_seek_to_pcm_frame(&audio.decoder, frame);
+  audio.cursor = frame;
+  return result;
+}
+
+TA_PUBLIC void seek_to_second(unsigned long seconds) {
+  unsigned long frame = audio.decoder.outputSampleRate * (ma_uint64)seconds;
+  assert(frame <= audio.length);
+  Log("second %lu frames %lu\n", (unsigned long)seconds, frame);
+  // ma_mix_pcm_frames_f32()
+  seek_to_frame(frame);
+  return;
+}
+
+/*
+TA_PUBLIC void SeekToSecond(unsigned long seconds) {
+  thread thread;
+  InitThread(&thread, _SeekToSecond, (void*)seconds);
+  pthread_join(thread.thread, NULL);
+}
+*/
 
 void async_play_song(char* filename) {
   assert(is_audio_ready() == true);
@@ -148,11 +184,7 @@ void async_play_song(char* filename) {
 
 void async_unload_song(void) {
   assert(is_audio_ready() == true);
-  ma_result result = ma_decoder_uninit(&audio.decoder);
-  if(result != MA_SUCCESS) {
-    Log("failed to uninit decoder with error %s\n", ma_result_description(result));
-  }
-  assert(result == MA_SUCCESS);
+  ma_decoder_uninit(&audio.decoder);
 }
 
 void toggle_pause(void) {
