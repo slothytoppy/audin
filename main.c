@@ -45,12 +45,13 @@ void render_queue(Queue q) {
 }
 
 int main(void) {
+  // assert(false && "fix pausing segfaulting and audio not playing properly");
   init_audio();
   init_ui();
-  set_volume(0.3);
   Queue queue;
   queue_init(&queue);
   queue_read_dir(&queue, "./stuff/");
+  assert(queue.count > 0);
   async_play_song(queue.items[get_queue_cursor()]);
   send_current_song();
   key_append('q');
@@ -69,12 +70,11 @@ int main(void) {
         send_current_song();
         break;
       case 'q':
-        break;
         if(get_song_time_played_in_seconds() > 5) {
           seek_to_second(get_song_time_played_in_seconds() - 5);
         }
-      case 'e':
         break;
+      case 'e':
         Log("song length: %llu\n", get_song_length_in_seconds());
         Log("old played time: %llu\n", get_song_time_played_in_seconds());
         // if(GetSongPlayedTimeInSeconds() + 5 < GetSongLengthInSeconds()) {

@@ -10,6 +10,7 @@ void queue_init(Queue* q) {
 void queue_deinit(Queue* q) {
   q->count = 0;
   q->capacity = 0;
+  q->cursor = 0;
   for(int i = 0; i < q->count; i++) {
     free(q->items[i]);
   }

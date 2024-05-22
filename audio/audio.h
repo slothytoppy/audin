@@ -37,7 +37,6 @@ typedef struct {
   };
   char* song_name;
   thread thread;
-  char* filename;
   Queue queue;
 } Audio;
 
@@ -63,6 +62,7 @@ TA_PUBLIC unsigned long int get_song_length(void);
 TA_PUBLIC unsigned long int get_song_length_in_seconds(void);
 TA_PUBLIC unsigned long int get_song_time_played(void);
 TA_PUBLIC unsigned long int get_song_time_played_in_seconds(void);
+TA_PUBLIC void seek_to_frame(unsigned long int);
 TA_PUBLIC void seek_to_second(unsigned long int);
 TA_PUBLIC void Log(char* fmt, ...);
 // queue
@@ -73,5 +73,6 @@ TA_PUBLIC unsigned long long get_queue_cursor(void);
 TA_PUBLIC bool set_queue_cursor(unsigned long long);
 TA_PUBLIC char* get_song_name(void);
 TA_PUBLIC bool reset_queue(Queue* queue);
+TA_PUBLIC void dump_audio_info(void);
 
 #endif // AUDIO_H

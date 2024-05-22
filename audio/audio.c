@@ -24,7 +24,7 @@ __attribute__((format(printf, 1, 2))) TA_PUBLIC void Log(char* msg, ...) {
 }
 
 bool at_song_end() {
-  // dont do assert(IsAudioReady()==true) here since its called in the data_callback and may be called before the device has any frames to read, which would fail the assert
+  // dont do assert(IsAudioReady()==true) here since its called in the data callback and may be called before the device has any frames to read, which would fail the assert
   if(audio.at_end == true || audio.cursor > 0 && audio.cursor == audio.length) {
     audio.at_end = true;
     return true;
@@ -33,18 +33,21 @@ bool at_song_end() {
 }
 
 void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount) {
-  ma_decoder* pdatasource = (ma_data_source*)pDevice->pUserData;
+  ma_decoder* pdatasource = (ma_decoder*)pDevice->pUserData;
+  if(pdatasource == NULL) {
+    return;
+  }
+  if(at_song_end() || audio.playing == MA_FALSE) {
+    return;
+  }
   ma_result result = MA_ERROR;
-  if(at_song_end()) {
-    return;
-  }
-  if(audio.playing == MA_FALSE) {
-    return;
-  }
   ma_uint64 framesRead;
   result = ma_decoder_read_pcm_frames(pdatasource, pOutput, frameCount, &framesRead);
   if(result != MA_SUCCESS) {
-    Log("failed to read pcm frames in data callback, framecount: %u frames read: %llu error %s\n", frameCount, framesRead, ma_result_description(result));
+    Log("song %s failed to read pcm frames in data callback, framecount: %u frames read: %llu error %s\n", audio.song_name, frameCount, framesRead, ma_result_description(result));
+    if(pdatasource == NULL) {
+      Log("decoder is null\n");
+    }
   }
   assert(result == MA_SUCCESS);
   result = ma_decoder_get_cursor_in_pcm_frames(&audio.decoder, &audio.cursor);
@@ -56,14 +59,14 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
 }
 
 void init_audio(void) {
-  ma_device_config device_config = ma_device_config_init(ma_device_type_playback);
-  device_config.playback.format = ma_format_f32;
-  device_config.playback.channels = 2;
-  device_config.sampleRate = 0;
-  device_config.dataCallback = data_callback;
-  device_config.pUserData = NULL;
+  ma_device_config config = ma_device_config_init(ma_device_type_playback);
+  config.playback.format = ma_format_f32;
+  config.playback.channels = 0;
+  config.sampleRate = 0;
+  config.dataCallback = data_callback;
+  config.pUserData = NULL;
   ma_result result = MA_ERROR;
-  result = ma_device_init(NULL, &device_config, &audio.device);
+  result = ma_device_init(NULL, &config, &audio.device);
   if(result != MA_SUCCESS) {
     Log("in InitAudio failed to initialize device with error %s\n", ma_result_description(result));
   }
@@ -112,20 +115,32 @@ unsigned long int get_song_length(void) {
   return length;
 }
 
-void* play_song(void* filename) {
-  assert(is_audio_ready() == true);
+TA_PRIVATE bool does_file_exist(char* filename) {
   struct stat fi;
   if(stat(filename, &fi) < 0) {
-    return false;
+    if(errno == ENOENT) {
+      return false;
+    }
+    Log("error in does_file_exist %s\n", strerror(errno));
   }
+  return true;
+}
+
+void* play_song(void* filename) {
+  assert(is_audio_ready() == true);
+  assert(does_file_exist(filename) == true);
   ma_decoder_config config = ma_decoder_config_init_default();
-  ma_result result;
-  result = ma_decoder_init_file(filename, &config, &audio.decoder);
+  ma_result result = ma_decoder_init_file(filename, &config, &audio.decoder);
   if(result != MA_SUCCESS) {
     Log("failed to decode %s with error %s\n", (char*)filename, ma_result_description(result));
   }
   assert(result == MA_SUCCESS);
+  audio.device.pUserData = &audio.decoder;
   audio.length = get_song_length();
+  audio.song_name = filename;
+  audio.playing = true;
+  dump_audio_info();
+  return (void*)true;
 }
 
 TA_PUBLIC unsigned long int get_song_length_in_seconds(void) {
@@ -151,10 +166,9 @@ TA_PUBLIC unsigned long int get_cursor(void) {
   return get_song_time_played();
 }
 
-TA_PUBLIC bool seek_to_frame(unsigned long int frame) {
+TA_PUBLIC void seek_to_frame(unsigned long int frame) {
   ma_result result = ma_decoder_seek_to_pcm_frame(&audio.decoder, frame);
   audio.cursor = frame;
-  return result;
 }
 
 TA_PUBLIC void seek_to_second(unsigned long seconds) {
@@ -204,7 +218,7 @@ void toggle_mute(void) {
 
 bool is_muted(void) {
   assert(is_audio_ready() == true);
-  if(audio.volume == 0 || audio.muted == true) {
+  if(audio.muted == true) {
     return true;
   }
   return false;
@@ -289,12 +303,11 @@ char* get_song_name(void) {
 }
 
 void play_prev_song(void) {
-  if(audio.queue.cursor - 1 < 0) {
-    return;
-  } else {
+  if(audio.queue.cursor > 0) {
+    Log("play prev song: \nold cursor pos %lu\nnew cursor pos %lu\n", audio.queue.cursor, audio.queue.cursor - 1);
     audio.queue.cursor -= 1;
+    async_play_song(audio.queue.items[audio.queue.cursor]);
   }
-  async_play_song(audio.queue.items[audio.queue.cursor]);
 }
 
 void play_next_song(void) {
@@ -324,4 +337,9 @@ bool reset_queue(Queue* queue) {
   queue->cursor = 0;
   queue->capacity = 0;
   return true;
+}
+
+void dump_audio_info(void) {
+  Log("cursor %llu\nlength %llu\nmuted %d\nplaying %d\nis initialized %d\n", audio.cursor, audio.length, audio.muted, audio.playing, audio.is_initialized);
+  return;
 }

@@ -2,4 +2,5 @@ stuff/
 bin/
 build
 build.old
-
+main
+log
