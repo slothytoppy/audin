@@ -25,7 +25,10 @@ __attribute__((format(printf, 1, 2))) TA_PUBLIC void Log(char* msg, ...) {
 
 bool at_song_end() {
   // dont do assert(IsAudioReady()==true) here since its called in the data callback and may be called before the device has any frames to read, which would fail the assert
-  if(audio.at_end == true || audio.cursor > 0 && audio.cursor == audio.length) {
+  if(audio.at_end == true) {
+    return true;
+  }
+  if(audio.cursor > 0 && audio.length > 0 && audio.cursor == audio.length) {
     audio.at_end = true;
     return true;
   }
@@ -44,7 +47,7 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
   ma_uint64 framesRead;
   result = ma_decoder_read_pcm_frames(pdatasource, pOutput, frameCount, &framesRead);
   if(result != MA_SUCCESS) {
-    Log("song %s failed to read pcm frames in data callback, framecount: %u frames read: %llu error %s\n", audio.song_name, frameCount, framesRead, ma_result_description(result));
+    Log("song %s failed to read pcm frames in data callback, framecount: %u frames read: %llu error %s %d\n", audio.song_name, frameCount, framesRead, ma_result_description(result), result);
     if(pdatasource == NULL) {
       Log("decoder is null\n");
     }
@@ -117,17 +120,13 @@ unsigned long int get_song_length(void) {
 
 TA_PRIVATE bool does_file_exist(char* filename) {
   struct stat fi;
-  if(stat(filename, &fi) < 0) {
-    if(errno == ENOENT) {
-      return false;
-    }
-    Log("error in does_file_exist %s\n", strerror(errno));
-  }
+  assert(stat(filename, &fi) == 0);
   return true;
 }
 
 void* play_song(void* filename) {
   assert(is_audio_ready() == true);
+  Log("attempting to decode %s cursor is %lu\n", filename, audio.queue.cursor);
   assert(does_file_exist(filename) == true);
   ma_decoder_config config = ma_decoder_config_init_default();
   ma_result result = ma_decoder_init_file(filename, &config, &audio.decoder);
@@ -139,7 +138,7 @@ void* play_song(void* filename) {
   audio.length = get_song_length();
   audio.song_name = filename;
   audio.playing = true;
-  dump_audio_info();
+  audio.at_end = false;
   return (void*)true;
 }
 
@@ -173,20 +172,11 @@ TA_PUBLIC void seek_to_frame(unsigned long int frame) {
 
 TA_PUBLIC void seek_to_second(unsigned long seconds) {
   unsigned long frame = audio.decoder.outputSampleRate * (ma_uint64)seconds;
-  assert(frame <= audio.length);
   Log("second %lu frames %lu\n", (unsigned long)seconds, frame);
-  // ma_mix_pcm_frames_f32()
+  assert(frame <= audio.length);
   seek_to_frame(frame);
   return;
 }
-
-/*
-TA_PUBLIC void SeekToSecond(unsigned long seconds) {
-  thread thread;
-  InitThread(&thread, _SeekToSecond, (void*)seconds);
-  pthread_join(thread.thread, NULL);
-}
-*/
 
 void async_play_song(char* filename) {
   assert(is_audio_ready() == true);
@@ -199,6 +189,7 @@ void async_play_song(char* filename) {
 void async_unload_song(void) {
   assert(is_audio_ready() == true);
   ma_decoder_uninit(&audio.decoder);
+  audio.playing = false;
 }
 
 void toggle_pause(void) {
@@ -289,8 +280,8 @@ bool queue_read_dir(Queue* queue, char* dirpath) {
     }
     strcat(buffer, dname);
     int result = stat(buffer, &fi);
-    assert(result == 0);
     if(fi.st_mode & S_IFREG) {
+      assert(result == 0);
       queue_append(queue, buffer);
     }
   }
@@ -306,17 +297,17 @@ void play_prev_song(void) {
   if(audio.queue.cursor > 0) {
     Log("play prev song: \nold cursor pos %lu\nnew cursor pos %lu\n", audio.queue.cursor, audio.queue.cursor - 1);
     audio.queue.cursor -= 1;
+    async_unload_song();
     async_play_song(audio.queue.items[audio.queue.cursor]);
   }
 }
 
 void play_next_song(void) {
-  if(audio.queue.cursor + 1 > audio.queue.count) {
-    return;
-  } else {
+  if(audio.queue.cursor < audio.queue.count - 1) {
     audio.queue.cursor += 1;
+    async_unload_song();
+    async_play_song(audio.queue.items[audio.queue.cursor]);
   }
-  async_play_song(audio.queue.items[audio.queue.cursor]);
 }
 
 unsigned long long get_queue_cursor(void) {

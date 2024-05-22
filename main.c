@@ -6,7 +6,7 @@
 #include <unistd.h>
 
 void send_current_song(void) {
-  char* args[] = {"notify-send", "currently playing ", (char*)get_song_name(), "-t", "1500", NULL};
+  char* args[] = {"notify-send", "currently playing ", (char*)get_song_name(), "-t", "2000", NULL};
   pid_t pid = fork();
   if(pid == 0) {
     execvp(args[0], args);
@@ -52,7 +52,11 @@ int main(void) {
   queue_init(&queue);
   queue_read_dir(&queue, "./stuff/");
   assert(queue.count > 0);
-  async_play_song(queue.items[get_queue_cursor()]);
+  for(int i = 0; i < queue.count; i++) {
+    Log("%d %s\n", i, queue.items[i]);
+    assert(queue.items[i] != NULL);
+  }
+  async_play_song("./stuff/Eminem - Parking Lot (Skit).mp3");
   send_current_song();
   key_append('q');
   float volume = get_volume();
@@ -106,7 +110,6 @@ int main(void) {
     }
     if(at_song_end()) {
       play_next_song();
-      send_current_song();
     }
   }
   deinit_ui();
