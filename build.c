@@ -12,13 +12,13 @@ void build_miniaudio(void) {
 }
 
 void build_audio(void) {
-  if(needs_rebuild("./audio/audio.c", "./bin/audio.o")) {
-    Nom_cmd cmd = {0};
-    build_miniaudio();
-    nom_cmd_append_many(&cmd, 6, "gcc", "-g", "./audio/audio.c", "-c", "-o", "./bin/audio.o");
-    nom_run_sync(cmd);
-    nom_cmd_reset(&cmd);
-  }
+  // if(needs_rebuild("./audio/audio.c", "./bin/audio.o")) {
+  Nom_cmd cmd = {0};
+  build_miniaudio();
+  nom_cmd_append_many(&cmd, 6, "gcc", "-g", "./audio/audio.c", "-c", "-o", "./bin/audio.o");
+  nom_run_sync(cmd);
+  nom_cmd_reset(&cmd);
+  //}
 }
 
 void build_ui(void) {
@@ -41,7 +41,6 @@ void build_with_audio_and_ui(char* filename) {
 }
 
 int main(int argc, char** argv) {
-  rebuild(argc, argv, __FILE__, " gcc");
   Nom_cmd cmd = {0};
 
   if(!IS_PATH_EXIST("./bin")) {
@@ -50,7 +49,7 @@ int main(int argc, char** argv) {
   build_ui();
   build_audio();
   {
-    nom_cmd_append_many(&cmd, 11, "gcc", "-g", "-lm", "-lncurses", "./bin/audio.o", "./bin/miniaudio.o", "./bin/ui.o", "./queue/queue.c", "main.c", "-o", "main");
+    nom_cmd_append_many(&cmd, 11, "gcc", "-g", "-lm", "-lncurses", "./bin/audio.o", "./bin/miniaudio.o", "./bin/ui.o", "./queue/queue.c", "main.c", "-o", "./bin/main");
     nom_run_sync(cmd);
     nom_cmd_reset(&cmd);
   }

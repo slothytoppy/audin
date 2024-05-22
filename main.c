@@ -1,114 +1,87 @@
 #include "./audio/audio.h"
-#include "./queue/queue.h"
 #include "./ui/ui.h"
 #include <assert.h>
-#include <dirent.h>
 #include <ncurses.h>
-#include <stdio.h>
-#include <string.h>
-#include <sys/time.h>
+#include <unistd.h>
 
-void init_queue(Queue* queue, char* dirpath) {
-  struct dirent* dirent;
-  struct stat fi;
-  DIR* dir = opendir(dirpath);
-  assert(dir != NULL);
-  while((dirent = readdir(dir))) {
-    char* dname = dirent->d_name;
-    char* buffer = calloc(1, 4096);
-    strcat(buffer, dirpath);
-    if(buffer[strlen(buffer) - 1] != '/') {
-      strcat(buffer, "/");
-    }
-    strcat(buffer, dname);
-    if(strlen(dname) <= 2 && dname[0] == '.' || dname[1] == '.') {
-      continue;
-    }
-    int result = stat(buffer, &fi);
-    assert(result == 0);
-    if(fi.st_mode & S_IFREG) {
-      queue_append(queue, buffer);
-    }
-  }
-}
-
-void DecQueueCursor(Queue* queue) {
+void PlayPreviousSong(Queue* queue) {
   if(queue->cursor - 1 < 0) {
     queue->cursor += 1;
   } else {
     queue->cursor -= 1;
   }
+  async_play_song(queue->items[queue->cursor]);
 }
 
-void IncQueueCursor(Queue* queue) {
-  if(queue->cursor >= queue->count - 1) {
+void PlayNextSong(Queue* queue) {
+  if(queue->cursor + 1 >= queue->count) {
     queue->cursor = 0;
   } else {
     queue->cursor += 1;
   }
-}
-
-void PlayPreviousSong(Queue* queue) {
-  DecQueueCursor(queue);
-  AsyncPlaySong(queue->items[queue->cursor]);
-}
-
-void PlayNextSong(Queue* queue) {
-  IncQueueCursor(queue);
-  AsyncPlaySong(queue->items[queue->cursor]);
+  async_play_song(queue->items[queue->cursor]);
 }
 
 void queue_is_not_null(Queue q) {
-  assert(q.count > 0 && q.capacity > 0);
+  assert(q.capacity > 0);
   for(int i = 0; i < q.count; i++) {
     assert(q.items[i] != NULL);
   }
 }
 
+void send_current_song(void) {
+  char* args[] = {"notify-send", "currently playing ", (char*)get_song_name(), "-t", "1500", NULL};
+  pid_t pid = fork();
+  if(pid == 0) {
+    execvp(args[0], args);
+    return;
+  }
+}
+
 int main(void) {
-  InitAudio();
+  init_audio();
   init_ui();
-  SetVolume(0.3);
+  set_volume(0.3);
   Queue queue;
   queue_init(&queue);
-  init_queue(&queue, "./stuff/");
-  char* current_song = queue.items[queue.cursor];
-  AsyncPlaySong(queue.items[queue.cursor]);
+  queue_read_dir(&queue, "./stuff/");
+  async_play_song(queue.items[get_queue_cursor()]);
+  send_current_song();
   key_append('q');
-  float volume = GetVolume();
+  float volume = get_volume();
   while(should_close() != true) {
     int ch = getch();
     if(ch != ERR) {
       handle_exit_keys(ch);
       switch(ch) {
       case 'a':
-        AsyncUnloadSong();
-        PlayPreviousSong(&queue);
+        play_prev_song();
+        send_current_song();
         break;
       case 'd':
-        AsyncUnloadSong();
-        PlayNextSong(&queue);
+        play_next_song();
+        send_current_song();
         break;
       case 'c':
         volume -= 0.1f;
-        SetVolume(volume);
+        set_volume(volume);
         break;
       case 'v':
         volume += 0.1f;
-        SetVolume(volume);
+        set_volume(volume);
         break;
       case 'm':
-        ToggleMute();
+        toggle_mute();
         break;
       case ' ':
       case 'p':
-        TogglePause();
+        toggle_pause();
         break;
       }
     }
-    if(AtSongEnd()) {
-      AsyncUnloadSong();
-      PlayNextSong(&queue);
+    if(at_song_end()) {
+      play_next_song();
+      send_current_song();
     }
   }
   deinit_ui();
