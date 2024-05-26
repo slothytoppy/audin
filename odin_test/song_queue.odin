@@ -1,5 +1,6 @@
 package termaudio
 
+/*
 import "core:c/libc"
 import "core:fmt"
 import "core:os"
@@ -61,3 +62,4 @@ add_queue :: proc(q: queue) {
 		append(&audio.queue.songs, q.songs[i])
 	}
 }
+*/

@@ -1,10 +1,9 @@
 package termaudio
-
-import "vendor:miniaudio"
+// import "vendor:miniaudio"
 
 Audio :: struct {
-	device:                 ma.device,
-	decoder:                ma.decoder,
+	//	device:                 ma.device,
+	//decoder:                ma.decoder,
 	is_device_ready:        bool,
 	at_end:                 bool,
 	playing:                bool,
@@ -15,11 +14,12 @@ Audio :: struct {
 	played_time:            u64,
 	length_in_seconds:      u64,
 	played_time_in_seconds: u64,
-	queue:                  queue,
+	// queue:                  queue,
 }
 
 audio := Audio{}
 
+/*
 
 import "base:runtime"
 import "core:fmt"
@@ -208,4 +208,5 @@ main :: proc() {
 	}
 
 }
+*/
 */
