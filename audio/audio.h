@@ -35,6 +35,10 @@ typedef struct {
     ma_uint64 cursor;
     ma_uint64 length;
   };
+  struct {
+    ma_uint64 total_seconds;
+    ma_uint64 played_seconds;
+  };
   char* song_name;
   thread thread;
   Queue queue;
@@ -58,10 +62,10 @@ TA_PUBLIC float get_volume(void);
 TA_PUBLIC void toggle_mute(void);
 TA_PUBLIC bool is_muted(void);
 TA_PUBLIC bool is_audio_ready(void);
-TA_PUBLIC unsigned long int get_song_length(void);
-TA_PUBLIC unsigned long int get_song_length_in_seconds(void);
-TA_PUBLIC unsigned long int get_song_time_played(void);
-TA_PUBLIC unsigned long int get_song_time_played_in_seconds(void);
+TA_PUBLIC unsigned long long get_song_length(void);
+TA_PUBLIC unsigned long long get_song_length_in_seconds(void);
+TA_PUBLIC unsigned long long get_song_time_played(void);
+TA_PUBLIC unsigned long long get_song_time_played_in_seconds(void);
 TA_PUBLIC void seek_to_frame(unsigned long int);
 TA_PUBLIC void seek_to_second(unsigned long int);
 TA_PUBLIC void Log(char* fmt, ...);

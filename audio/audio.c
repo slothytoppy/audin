@@ -52,6 +52,10 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
       Log("decoder is null\n");
     }
   }
+  if(result == MA_AT_END) {
+    audio.at_end = true;
+    return;
+  }
   assert(result == MA_SUCCESS);
   result = ma_decoder_get_cursor_in_pcm_frames(&audio.decoder, &audio.cursor);
   if(result != MA_SUCCESS) {
@@ -107,17 +111,6 @@ bool is_audio_ready(void) {
   return audio.is_initialized;
 }
 
-unsigned long int get_song_length(void) {
-  assert(is_audio_ready() == true);
-  ma_uint64 length;
-  ma_result result = ma_decoder_get_length_in_pcm_frames(&audio.decoder, &length);
-  if(result != MA_SUCCESS) {
-    Log("failed to get length of the song with error %s\n", ma_result_description(result));
-  }
-  assert(result == MA_SUCCESS);
-  return length;
-}
-
 TA_PRIVATE bool does_file_exist(char* filename) {
   struct stat fi;
   assert(stat(filename, &fi) == 0);
@@ -126,7 +119,7 @@ TA_PRIVATE bool does_file_exist(char* filename) {
 
 void* play_song(void* filename) {
   assert(is_audio_ready() == true);
-  Log("attempting to decode %s cursor is %lu\n", filename, audio.queue.cursor);
+  Log("attempting to decode %s cursor is %lu\n", (char*)filename, audio.queue.cursor);
   assert(does_file_exist(filename) == true);
   ma_decoder_config config = ma_decoder_config_init_default();
   ma_result result = ma_decoder_init_file(filename, &config, &audio.decoder);
@@ -142,23 +135,35 @@ void* play_song(void* filename) {
   return (void*)true;
 }
 
-TA_PUBLIC unsigned long int get_song_length_in_seconds(void) {
-  ma_uint64 length = get_song_length() / audio.decoder.outputSampleRate;
+unsigned long long get_song_length(void) {
+  assert(is_audio_ready() == true);
+  ma_uint64 length;
+  ma_result result = ma_decoder_get_length_in_pcm_frames(&audio.decoder, &length);
+  if(result != MA_SUCCESS) {
+    Log("failed to get length of the song with error %s\n", ma_result_description(result));
+  }
+  assert(result == MA_SUCCESS);
   return length;
 }
 
-TA_PUBLIC unsigned long int get_sample_rate(void) {
-  return audio.decoder.outputSampleRate;
+TA_PUBLIC unsigned long long get_song_length_in_seconds(void) {
+  ma_uint64 length = audio.length / audio.decoder.outputSampleRate;
+  return length;
 }
 
-TA_PUBLIC unsigned long int get_song_time_played(void) {
+TA_PUBLIC unsigned long long get_song_time_played_in_seconds(void) {
+  ma_uint64 length = get_song_time_played() / audio.decoder.outputSampleRate;
+  Log("played in seconds %llu\n", length);
+  return length;
+}
+
+TA_PUBLIC unsigned long long get_song_time_played(void) {
   assert(is_audio_ready() == true);
   return audio.cursor;
 }
 
-TA_PUBLIC unsigned long int get_song_time_played_in_seconds(void) {
-  ma_uint64 length = get_song_time_played() / audio.decoder.outputSampleRate;
-  return length % 60;
+TA_PUBLIC unsigned long int get_sample_rate(void) {
+  return audio.decoder.outputSampleRate;
 }
 
 TA_PUBLIC unsigned long int get_cursor(void) {
@@ -166,13 +171,17 @@ TA_PUBLIC unsigned long int get_cursor(void) {
 }
 
 TA_PUBLIC void seek_to_frame(unsigned long int frame) {
+  assert(frame <= audio.length);
   ma_result result = ma_decoder_seek_to_pcm_frame(&audio.decoder, frame);
+  if(result != MA_SUCCESS) {
+    Log("failed to seek to %lu because %s with error code %d\n", frame, ma_result_description(result), result);
+    Log("seeked to %lu/%llu frames\n", frame, audio.length);
+  }
   audio.cursor = frame;
 }
 
 TA_PUBLIC void seek_to_second(unsigned long seconds) {
   unsigned long frame = audio.decoder.outputSampleRate * (ma_uint64)seconds;
-  Log("second %lu frames %lu\n", (unsigned long)seconds, frame);
   assert(frame <= audio.length);
   seek_to_frame(frame);
   return;
@@ -328,9 +337,4 @@ bool reset_queue(Queue* queue) {
   queue->cursor = 0;
   queue->capacity = 0;
   return true;
-}
-
-void dump_audio_info(void) {
-  Log("cursor %llu\nlength %llu\nmuted %d\nplaying %d\nis initialized %d\n", audio.cursor, audio.length, audio.muted, audio.playing, audio.is_initialized);
-  return;
 }

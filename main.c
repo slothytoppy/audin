@@ -5,8 +5,8 @@
 #include <string.h>
 #include <unistd.h>
 
-void send_current_song(void) {
-  char* args[] = {"notify-send", "currently playing ", (char*)get_song_name(), "-t", "2000", NULL};
+void send_current_song(char* song_name) {
+  char* args[] = {"notify-send", "currently playing ", song_name, "-t", "2000", NULL};
   pid_t pid = fork();
   if(pid == 0) {
     execvp(args[0], args);
@@ -14,22 +14,53 @@ void send_current_song(void) {
   }
 }
 
-void render_volume(float volume) {
+void render_volume() {
   char* msg = calloc(1, 9);
-  snprintf(msg, 9, "%f", volume);
+  snprintf(msg, 9, "%f", get_volume());
   renderat(maxx() / 2, maxy() / 2, msg);
   free(msg);
 }
 
 void render_length(void) {
-  char* msg = calloc(1, 16);
-  snprintf(msg, 256, "%lu/%lu", get_song_time_played_in_seconds(), get_song_length_in_seconds());
+  char* msg = calloc(1, 256);
+  char* played_minutes = calloc(1, 5);
+  char* played_seconds = calloc(1, 5);
+  char* total_minutes = calloc(1, 5);
+  char* total_seconds = calloc(1, 5);
+  unsigned long remaining_time = get_song_time_played_in_seconds();
+  unsigned long song_length = get_song_length_in_seconds();
+  if(remaining_time / 60 < 10) {
+    snprintf(played_minutes, 5, "0%lu:", remaining_time / 60);
+  } else {
+    snprintf(played_minutes, 5, "%lu:", remaining_time / 60);
+  }
+  if(remaining_time % 60 < 10) {
+    snprintf(played_seconds, 5, "0%lu/", remaining_time % 60);
+  } else {
+    snprintf(played_seconds, 5, "%lu/", remaining_time % 60);
+  }
+  if(song_length / 60 < 10) {
+    snprintf(total_minutes, 5, "0%lu:", song_length / 60);
+  } else {
+    snprintf(total_minutes, 5, "%lu:", song_length / 60);
+  }
+  if(song_length % 60 < 10) {
+    snprintf(total_seconds, 5, "0%lu", song_length % 60);
+  } else {
+    snprintf(total_seconds, 5, "%lu", song_length % 60);
+  }
+  snprintf(msg, 256, "%s%s%s%s\n", played_minutes, played_seconds, total_minutes, total_seconds);
   renderat(maxx() / 2, maxy() / 2 - 1, msg);
+
   free(msg);
+  free(total_seconds);
+  free(total_minutes);
+  free(played_seconds);
+  free(played_minutes);
 }
 
-void render_song_name(Queue queue) {
-  renderat(maxx() / 2, maxy() / 2 - 2, queue.items[queue.cursor]);
+void render_song_name(void) {
+  renderat(maxx() / 2, maxy() / 2 - 2, get_song_name());
 }
 
 void render_queue(Queue q) {
@@ -45,7 +76,6 @@ void render_queue(Queue q) {
 }
 
 int main(void) {
-  // assert(false && "fix pausing segfaulting and audio not playing properly");
   init_audio();
   init_ui();
   Queue queue;
@@ -53,12 +83,11 @@ int main(void) {
   queue_read_dir(&queue, "./stuff/");
   assert(queue.count > 0);
   for(int i = 0; i < queue.count; i++) {
-    Log("%d %s\n", i, queue.items[i]);
     assert(queue.items[i] != NULL);
   }
-  async_play_song("./stuff/Eminem - Parking Lot (Skit).mp3");
-  send_current_song();
-  key_append('q');
+  async_play_song(queue.items[queue.cursor]);
+  send_current_song(queue.items[queue.cursor]);
+  key_append(' ');
   float volume = get_volume();
   while(should_close() != true) {
     int ch = getch();
@@ -67,11 +96,11 @@ int main(void) {
       switch(ch) {
       case 'a':
         play_prev_song();
-        send_current_song();
+        send_current_song(get_song_name());
         break;
       case 'd':
         play_next_song();
-        send_current_song();
+        send_current_song(get_song_name());
         break;
       case 'q':
         if(get_song_time_played_in_seconds() > 5) {
@@ -79,26 +108,21 @@ int main(void) {
         }
         break;
       case 'e':
-        Log("song length: %llu\n", get_song_length_in_seconds());
-        Log("old played time: %llu\n", get_song_time_played_in_seconds());
-        // if(GetSongPlayedTimeInSeconds() + 5 < GetSongLengthInSeconds()) {
-        seek_to_second(get_song_time_played_in_seconds() + 5);
-        // }
-        Log("new played time: %llu\n", get_song_time_played_in_seconds());
+        if(get_song_time_played_in_seconds() + 5 < get_song_length_in_seconds()) {
+          seek_to_second(get_song_time_played_in_seconds() + 5);
+        }
         break;
       case 'c':
-        volume -= 0.1f;
-        set_volume(volume);
-        if(volume < 0.0f) {
-          volume += 0.1f;
+        if(volume > 0.0f) {
+          volume -= 0.1f;
+          set_volume(volume);
         }
         break;
       case 'v':
-        if(volume > 1.0f) {
-          volume -= 0.1f;
+        if(volume < 1.0f) {
+          volume += 0.1f;
+          set_volume(volume);
         }
-        volume += 0.1f;
-        set_volume(volume);
         break;
       case 'm':
         toggle_mute();
@@ -106,11 +130,22 @@ int main(void) {
       case 'p':
         toggle_pause();
         break;
+      case 's':
+        seek_to_second(20);
+        break;
       }
     }
     if(at_song_end()) {
       play_next_song();
+      send_current_song(get_song_name());
     }
+    clear();
+    usleep(600);
+    /*
+    render_length();
+    render_volume();
+    render_song_name();
+    */
   }
   deinit_ui();
 }
