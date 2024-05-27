@@ -1,4 +1,5 @@
 package termaudio
+import "./id3"
 import "core:fmt"
 import "core:os"
 import "core:strconv"
@@ -8,7 +9,7 @@ import rl "vendor:raylib"
 
 SongQueue :: struct {
 	files:          rl.FilePathList,
-	cursor:         u64,
+	cursor:         i64,
 	muted, playing: bool,
 	volume:         f32,
 	music:          rl.Music,
@@ -18,14 +19,17 @@ main :: proc() {
 	q := SongQueue{}
 	rl.InitAudioDevice()
 	defer rl.CloseAudioDevice()
-	assert(rl.IsAudioDeviceReady())
-	q.files = rl.LoadDirectoryFiles(strings.clone_to_cstring("../stuff/"))
+	rl.SetTraceLogLevel(rl.TraceLogLevel.ERROR)
+	assert(rl.IsAudioDeviceReady() != true)
+	q.files = rl.LoadDirectoryFiles(strings.clone_to_cstring("../stuff"))
+	id3.parse_song(strings.clone_from_cstring(q.files.paths[0]))
 	defer rl.UnloadDirectoryFiles(q.files)
 	using rl.KeyboardKey
 	q.music = rl.LoadMusicStream(q.files.paths[q.cursor])
 	defer rl.UnloadMusicStream(q.music)
 	assert(rl.IsMusicReady(q.music))
 	q.volume = 0.5
+	q.playing = true
 	rl.SetMasterVolume(q.volume)
 	rl.SetMusicVolume(q.music, q.volume)
 	rl.PlayMusicStream(q.music)
@@ -63,9 +67,13 @@ main :: proc() {
 			}
 		} else if (rl.IsKeyPressed(.A)) {
 			q = play_prev(q)
-		} else if (rl.IsKeyPressed(.D)) {
-			rl.UnloadMusicStream(q.music)
+			id3.parse_song(strings.clone_from_cstring(q.files.paths[q.cursor]))
+		} else if (rl.IsKeyPressed(.D) || rl.IsKeyPressedRepeat(.D)) {
+			if (rl.IsMusicReady(q.music)) {
+				rl.UnloadMusicStream(q.music)
+			}
 			q = play_next(q)
+			id3.parse_song(strings.clone_from_cstring(q.files.paths[q.cursor]))
 		} else if (rl.IsKeyPressed(.P) || rl.IsKeyPressed(.SPACE)) {
 			q.playing = !q.playing
 			if (q.playing == true) {
@@ -103,26 +111,29 @@ play_song :: proc(q: SongQueue, song: string) {
 }
 
 */
-
+@(require_results)
 play_prev :: proc(q: SongQueue) -> SongQueue {
 	q := q
-	if (q.cursor >= 1) {
-		q.cursor -= 1
-		q.music = rl.LoadMusicStream(q.files.paths[q.cursor])
-		rl.PlayMusicStream(q.music)
-		assert(rl.IsMusicReady(q.music))
-		assert(rl.IsMusicStreamPlaying(q.music))
-		fmt.printf("playing %s\n", q.files.paths[q.cursor])
+	q.cursor -= 1
+	if (q.cursor < 0) {
+		q.cursor = cast(i64)q.files.count - 1
 	}
+
+	q.music = rl.LoadMusicStream(q.files.paths[q.cursor])
+	rl.PlayMusicStream(q.music)
+	assert(rl.IsMusicReady(q.music))
+	assert(rl.IsMusicStreamPlaying(q.music))
+	fmt.printf("playing %s\n", q.files.paths[q.cursor])
 	return q
 }
 
+@(require_results)
 play_next :: proc(q: SongQueue) -> SongQueue {
 	q := q
-	if (q.cursor + 1 > cast(u64)q.files.count) {
-		assert(q.cursor < cast(u64)q.files.count)
-	}
 	q.cursor += 1
+	if (q.cursor + 1 >= cast(i64)q.files.count) {
+		q.cursor = 0
+	}
 	q.music = rl.LoadMusicStream(q.files.paths[q.cursor])
 	rl.PlayMusicStream(q.music)
 	assert(rl.IsMusicReady(q.music))

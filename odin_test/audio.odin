@@ -9,7 +9,7 @@ Audio :: struct {
 	playing:                bool,
 	muted:                  bool,
 	volume:                 f32,
-	cursor:                 u64,
+	cursor:                 i64,
 	length:                 u64,
 	played_time:            u64,
 	length_in_seconds:      u64,
