@@ -4,7 +4,6 @@ import "core:fmt"
 import "core:os"
 import "core:strconv"
 import "core:strings"
-import "core:thread"
 import rl "vendor:raylib"
 
 SongQueue :: struct {
@@ -16,15 +15,23 @@ SongQueue :: struct {
 }
 
 main :: proc() {
+	logger("log", "hello world", 2, "\n")
+	// id3.todo("rename project to audin (credit from wiru)")
 	q := SongQueue{}
 	rl.InitAudioDevice()
 	defer rl.CloseAudioDevice()
+	window_config: rl.ConfigFlags = {rl.ConfigFlag.WINDOW_RESIZABLE}
+	rl.InitWindow(1080, 720, "hello window")
+	defer rl.CloseWindow()
+	font: rl.Font = rl.LoadFont("./fonts/Alegreya-Regular.ttf")
+	defer rl.UnloadFont(font)
+	rl.SetWindowState(window_config)
+	rl.SetTargetFPS(60)
 	rl.SetTraceLogLevel(rl.TraceLogLevel.ERROR)
-	assert(rl.IsAudioDeviceReady() != true)
-	q.files = rl.LoadDirectoryFiles(strings.clone_to_cstring("../stuff"))
-	id3.parse_song(strings.clone_from_cstring(q.files.paths[0]))
+	dir_path: cstring = "../stuff"
+	q.files = rl.LoadDirectoryFiles(dir_path)
+	id3_info := id3.parse_song(strings.clone_from_cstring(q.files.paths[q.cursor]))
 	defer rl.UnloadDirectoryFiles(q.files)
-	using rl.KeyboardKey
 	q.music = rl.LoadMusicStream(q.files.paths[q.cursor])
 	defer rl.UnloadMusicStream(q.music)
 	assert(rl.IsMusicReady(q.music))
@@ -34,46 +41,39 @@ main :: proc() {
 	rl.SetMusicVolume(q.music, q.volume)
 	rl.PlayMusicStream(q.music)
 	assert(rl.IsMusicStreamPlaying(q.music) == true)
-	rl.InitWindow(720, 480, "hello window")
-	rl.SetTargetFPS(60)
-	/*init_audio()
-	q := audio
-	q.queue = read_dir("../stuff")
-	assert(len(q.queue.songs) > 0)
-	play_song(q.queue.songs[0])
-  */
 	for (!rl.WindowShouldClose()) {
+		buf: [8]byte
 		rl.UpdateMusicStream(q.music)
 		rl.BeginDrawing()
-		rl.ClearBackground(rl.RED)
+		text := strconv.ftoa(buf[:], cast(f64)q.volume, 'f', 2, 64)
+		text, _ = strings.remove(text, "+", 1)
+		msg := strings.clone_to_cstring(text)
+		rl.DrawTextEx(font, msg, rl.Vector2{0, 0}, cast(f32)font.baseSize, 2, rl.BLUE)
+		rl.DrawTextEx(
+			font,
+			msg,
+			rl.Vector2{0, cast(f32)font.baseSize},
+			cast(f32)font.baseSize,
+			2,
+			rl.GREEN,
+		)
+		rl.ClearBackground(rl.BLACK)
 		rl.EndDrawing()
-		key := get_key_pressed()
+		key := rl.GetKeyPressed()
 		if (key == rl.KeyboardKey.ESCAPE || key == rl.KeyboardKey.Q) {
-			rl.CloseWindow()
-		}
-		if (rl.IsKeyPressed(.C) || rl.IsKeyPressedRepeat(.C)) {
-			if (q.volume - 0.1 > 0.0) {
-				q.volume -= 0.1
-				rl.SetMusicVolume(q.music, q.volume)
-				rl.SetMasterVolume(q.volume)
-				fmt.println(q.volume)
-			}
-		} else if (rl.IsKeyPressed(.V) || rl.IsKeyPressedRepeat(.V)) {
-			if (audio.volume + 0.1 < 1.1) {
-				q.volume += 0.1
-				rl.SetMusicVolume(q.music, q.volume)
-				rl.SetMasterVolume(q.volume)
-				fmt.println(q.volume)
-			}
-		} else if (rl.IsKeyPressed(.A)) {
+			return
+		} else if (rl.IsKeyPressed(.A)) || rl.IsKeyPressedRepeat(.A) {
 			q = play_prev(q)
-			id3.parse_song(strings.clone_from_cstring(q.files.paths[q.cursor]))
 		} else if (rl.IsKeyPressed(.D) || rl.IsKeyPressedRepeat(.D)) {
-			if (rl.IsMusicReady(q.music)) {
-				rl.UnloadMusicStream(q.music)
-			}
 			q = play_next(q)
-			id3.parse_song(strings.clone_from_cstring(q.files.paths[q.cursor]))
+		} else if (rl.IsKeyPressed(.C) || rl.IsKeyPressedRepeat(.C)) {
+			q.volume -= 0.1
+			q.volume = rl.Clamp(q.volume, 0.0, 1.0)
+			rl.SetMasterVolume(q.volume)
+		} else if (rl.IsKeyPressed(.V) || rl.IsKeyPressedRepeat(.V)) {
+			q.volume += 0.1
+			q.volume = rl.Clamp(q.volume, 0.0, 1.0)
+			rl.SetMasterVolume(q.volume)
 		} else if (rl.IsKeyPressed(.P) || rl.IsKeyPressed(.SPACE)) {
 			q.playing = !q.playing
 			if (q.playing == true) {
