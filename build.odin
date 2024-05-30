@@ -3,7 +3,11 @@ package termaudio
 import "core:fmt"
 import "core:os"
 import "core:strings"
+/*
+when ODIN_OS == .i386 {
 
+}
+*/
 main :: proc() {
 	curr_dir := os.get_current_directory()
 	target_dir := "/bin"
@@ -24,9 +28,13 @@ main :: proc() {
 	pid, _ := os.fork()
 	if (pid > 0) {
 		args = {"odin", "build", arg_path, out_path}
+		fmt.println("running", args[:])
 		err := os.execvp(args[0], args[1:])
 		if (err != os.ERROR_NONE) {
 			fmt.print(os.get_last_error())
+			return
 		}
+	}
+	if (pid == 0) {
 	}
 }

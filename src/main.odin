@@ -2,13 +2,14 @@ package termaudio
 import "./id3"
 import "core:fmt"
 import "core:os"
+import "core:path/filepath"
 import "core:strconv"
 import "core:strings"
+import "song_queue"
 import rl "vendor:raylib"
 
+
 main :: proc() {
-	// id3.todo("rename project to audin (credit from wiru)")
-	id3.todo("rename project to audin")
 	rl.SetTraceLogLevel(rl.TraceLogLevel.ERROR)
 	q := SongQueue{}
 	rl.InitAudioDevice()
@@ -20,36 +21,21 @@ main :: proc() {
 	defer rl.UnloadFont(font)
 	rl.SetWindowState(window_config)
 	rl.SetTargetFPS(60)
-	dir_path: cstring = "../stuff"
-	q.files = rl.LoadDirectoryFiles(dir_path)
-	id3_info := id3.parse_song(strings.clone_from_cstring(q.files.paths[q.cursor]))
-	defer rl.UnloadDirectoryFiles(q.files)
-	q.music = rl.LoadMusicStream(q.files.paths[q.cursor])
-	defer rl.UnloadMusicStream(q.music)
-	assert(rl.IsMusicReady(q.music))
+	q.paths = song_queue.read_dir("../stuff/")
+	fmt.println(q.paths.files[:])
+	q.count = cast(u64)len(q.paths.files)
+	song_queue._read_dir("hello", nil)
+	fmt.println(q.count)
+	q = play_song(q)
+	defer unload_song(q)
 	q.volume = 0.5
 	q.playing = true
-	rl.SetMasterVolume(q.volume)
-	rl.PlayMusicStream(q.music)
-	assert(rl.IsMusicStreamPlaying(q.music) == true)
+	q.muted = false
+	looping := false
 	for (!rl.WindowShouldClose()) {
 		buf: [8]byte
 		rl.UpdateMusicStream(q.music)
 		rl.BeginDrawing()
-		/*
-		text := strconv.ftoa(buf[:], cast(f64)q.volume, 'f', 2, 64)
-		text, _ = strings.remove(text, "+", 1)
-		msg := strings.clone_to_cstring(text)
-		rl.DrawTextEx(font, msg, rl.Vector2{0, 0}, cast(f32)font.baseSize, 2, rl.BLUE)
-		rl.DrawTextEx(
-			font,
-			msg,
-			rl.Vector2{0, cast(f32)font.baseSize},
-			cast(f32)font.baseSize,
-			2,
-			rl.GREEN,
-		)
-    */
 		write_volume(q, rl.Vector2{0, 0})
 		rl.ClearBackground(rl.BLACK)
 		rl.EndDrawing()
@@ -75,7 +61,18 @@ main :: proc() {
 			} else {
 				rl.PauseMusicStream(q.music)
 			}
+		} else if (rl.IsKeyPressed(.G)) {
+			rl.SeekMusicStream(q.music, rl.GetMusicTimeLength(q.music))
+		} else if (rl.IsKeyPressed(.M)) {
+			q.muted = !q.muted
+			volume := q.muted ? 0 : q.volume
+			rl.SetMasterVolume(volume)
+		} /*else if (rl.IsKeyPressed(.L)) {
+			looping = !looping
 		}
+		if (looping == true && rl.GetMusicTimePlayed(q.music) == rl.GetMusicTimeLength(q.music)) {
+		}
+    */
 	}
 }
 
