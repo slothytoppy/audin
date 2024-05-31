@@ -1,17 +1,22 @@
 package termaudio
 import "./id3"
+import "core:c"
 import "core:fmt"
 import "core:os"
 import "core:path/filepath"
 import "core:strconv"
 import "core:strings"
 import "song_queue"
-import rl "vendor:raylib"
-
+import rl "vendor:raylib/"
 
 main :: proc() {
 	rl.SetTraceLogLevel(rl.TraceLogLevel.ERROR)
-	q := SongQueue{}
+	q := SongQueue {
+		volume  = 0.5,
+		playing = true,
+		muted   = false,
+		looping = true,
+	}
 	rl.InitAudioDevice()
 	defer rl.CloseAudioDevice()
 	window_config: rl.ConfigFlags = {rl.ConfigFlag.WINDOW_RESIZABLE}
@@ -21,25 +26,41 @@ main :: proc() {
 	defer rl.UnloadFont(font)
 	rl.SetWindowState(window_config)
 	rl.SetTargetFPS(60)
-	q.paths = song_queue.read_dir("../stuff/")
-	fmt.println(q.paths.files[:])
-	q.count = cast(u64)len(q.paths.files)
-	song_queue._read_dir("hello", nil)
-	fmt.println(q.count)
+	q.paths = song_queue.read_dir("./stuff/")
 	q = play_song(q)
 	defer unload_song(q)
-	q.volume = 0.5
-	q.playing = true
-	q.muted = false
-	looping := false
 	for (!rl.WindowShouldClose()) {
-		buf: [8]byte
 		rl.UpdateMusicStream(q.music)
 		rl.BeginDrawing()
-		write_volume(q, rl.Vector2{0, 0})
-		rl.ClearBackground(rl.BLACK)
-		rl.EndDrawing()
+		rl.ClearBackground(
+			rl.GetColor(
+				cast(u32)rl.GuiGetStyle(
+					cast(c.int)rl.GuiControl.DEFAULT,
+					cast(c.int)rl.GuiDefaultProperty.TEXT_SPACING,
+				),
+			),
+		)
 		key := rl.GetKeyPressed()
+		q = handle_keypress(key, q)
+		write_looping(q.looping, rl.Vector2{0, 100})
+		write_volume(q, rl.Vector2{0, 0})
+		// write_volume(q, rl.Vector2{0, 0})
+		rl.DrawTextEx(
+			font,
+			strings.clone_to_cstring(q.paths.files[q.cursor]),
+			rl.Vector2{0, 50},
+			cast(f32)font.baseSize,
+			0,
+			rl.GREEN,
+		)
+		if (at_music_end(q)) {
+			if (q.looping == true) {
+				q = play_song(q)
+			} else {
+				q = play_next(q)
+			}
+		}
+		/*
 		if (key == rl.KeyboardKey.ESCAPE || key == rl.KeyboardKey.Q) {
 			return
 		} else if (rl.IsKeyPressed(.A)) || rl.IsKeyPressedRepeat(.A) {
@@ -67,12 +88,12 @@ main :: proc() {
 			q.muted = !q.muted
 			volume := q.muted ? 0 : q.volume
 			rl.SetMasterVolume(volume)
-		} /*else if (rl.IsKeyPressed(.L)) {
-			looping = !looping
-		}
-		if (looping == true && rl.GetMusicTimePlayed(q.music) == rl.GetMusicTimeLength(q.music)) {
+		} else if (rl.IsKeyPressed(.L)) {
+			q.looping = !q.looping
 		}
     */
+
+		rl.EndDrawing()
 	}
 }
 

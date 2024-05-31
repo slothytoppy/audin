@@ -1,40 +1,61 @@
-package termaudio
+package build
 
+import "base:runtime"
 import "core:fmt"
 import "core:os"
 import "core:strings"
-/*
-when ODIN_OS == .i386 {
+import "core:sys/linux"
+import "core:thread"
 
+cmd_info :: struct {
+	args: []string,
 }
-*/
-main :: proc() {
-	curr_dir := os.get_current_directory()
-	target_dir := "/bin"
-	arg_path, out_path: string
-	args: []string
 
-	if (strings.has_suffix(curr_dir, "audin")) {
-		arg_path = "src"
-		out_path = "-out:bin/audin"
-	} else if (strings.has_suffix(curr_dir, "src")) {
-		arg_path = "."
-		os.set_current_directory("../")
-		out_paths: []string = {"-out:", os.get_current_directory(), "/bin/audin"}
-		out_path, _ = strings.concatenate(out_paths)
-	} else {
-		fmt.panicf("script %s is not in src or root of the project", #file)
-	}
+@(private)
+_cmd :: proc(t: ^thread.Thread) {
+	args := transmute(^cmd_info)t.data
+	fmt.println(args.args)
 	pid, _ := os.fork()
-	if (pid > 0) {
-		args = {"odin", "build", arg_path, out_path}
-		fmt.println("running", args[:])
-		err := os.execvp(args[0], args[1:])
-		if (err != os.ERROR_NONE) {
-			fmt.print(os.get_last_error())
-			return
+	if (pid == 0) {
+		os.execvp(args.args[0], args.args[1:])
+	}
+	if (strings.has_prefix(args.args[0], "./")) {
+		status: u32
+		wait_options: linux.Wait_Options = {}
+		linux.waitpid(cast(linux.Pid)pid, &status, wait_options)
+	}
+	return
+}
+
+cmd :: proc(args: []string) {
+	threads := make([dynamic]^thread.Thread, 0, 2)
+	defer delete(threads)
+
+	if t := thread.create(_cmd); t != nil {
+		t.init_context = context
+		t.user_index = len(threads)
+		cmd_info: cmd_info
+		cmd_info.args = args
+		t.data = cast(rawptr)&cmd_info
+		append(&threads, t)
+		thread.start(t)
+	}
+
+	for len(threads) > 0 {
+		for i := 0; i < len(threads);  /**/{
+			if t := threads[i]; thread.is_done(t) {
+				fmt.printf("Thread %d is done\n", t.user_index)
+				thread.destroy(t)
+				ordered_remove(&threads, i)
+			} else {
+				i += 1
+			}
 		}
 	}
-	if (pid == 0) {
-	}
+}
+
+main :: proc() {
+	cmd({"odin", "build", "./src", "-out:./bin/audin"})
+	cmd({"./bin/audin"})
+	return
 }

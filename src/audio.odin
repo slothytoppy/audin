@@ -6,14 +6,15 @@ import "song_queue"
 import rl "vendor:raylib"
 
 SongQueue :: struct {
-	using paths:    song_queue.file_path_list,
+	paths:          song_queue.file_path_list,
 	cursor:         i64,
 	muted, playing: bool,
 	volume:         f32,
 	music:          rl.Music,
+	looping:        bool,
 }
 
-toggle_pause :: proc(q: SongQueue) {
+toggle_playing :: proc(q: SongQueue) {
 	q := q
 	q.playing = !q.playing
 	if (q.playing == true) {
@@ -21,6 +22,11 @@ toggle_pause :: proc(q: SongQueue) {
 	} else {
 		rl.ResumeMusicStream(q.music)
 	}
+}
+
+toggle_looping :: proc(q: SongQueue) {
+	q := q
+	q.looping = !q.looping
 }
 
 @(require_results)
@@ -48,7 +54,7 @@ play_prev :: proc(q: SongQueue) -> SongQueue {
 play_next :: proc(q: SongQueue) -> SongQueue {
 	q := q
 	q.cursor += 1
-	if (q.cursor + 1 > cast(i64)q.count) {
+	if (q.cursor + 1 > cast(i64)q.paths.count) {
 		q.cursor = 0
 	}
 	q = play_song(q)
@@ -57,4 +63,25 @@ play_next :: proc(q: SongQueue) -> SongQueue {
 
 unload_song :: proc(q: SongQueue) {
 	rl.UnloadMusicStream(q.music)
+}
+
+Change_Volume_Bits :: enum {
+	NEGATIVE,
+	POSITIVE,
+}
+
+change_volume :: proc(
+	volume_flag: Change_Volume_Bits,
+	q: SongQueue,
+	step: f32 = 0.1,
+) -> SongQueue {
+	q := q
+	if (volume_flag == .POSITIVE) {
+		q.volume += step
+	} else if (volume_flag == .NEGATIVE) {
+		q.volume -= step
+	}
+	q.volume = rl.Clamp(q.volume, 0.0, 1.0)
+	rl.SetMasterVolume(q.volume)
+	return q
 }

@@ -16,70 +16,22 @@ file_path_list :: struct {
 }
 
 @(private)
-walk_proc :: proc(
-	fi: os.File_Info,
-	in_err: os.Errno,
-	user_data: rawptr,
-) -> (
-	out_err: os.Errno,
-	skip_dir: bool,
-) {
-	user_data := cast(^file_path_list)user_data
-	if (fi.is_dir) {
-		user_data.cur_dir = fi.name
-		return
-	}
-	at_root := false
-	if (strings.compare(
-			   user_data.base_path[len(user_data.base_path) - len(user_data.cur_dir):],
-			   user_data.cur_dir,
-		   ) ==
-		   0) {
-		at_root = true
-	}
-	if (strings.has_suffix(user_data.base_path, user_data.cur_dir) == true) {
-		fmt.println(true)
-	}
-	/*
-	idx := strings.last_index_byte(user_data.cur_dir, '/')
-	buf := user_data.cur_dir[idx:]
-	at_root: bool = false
-	if (strings.compare(user_data.cur_dir, buf) == 0) {
-		at_root = true
-	}
-  if(strings.has_suffix(user_data.base_path, "/")){}
-  */
-	append(
-		&user_data.files,
-		strings.concatenate(
-			 {
-				strings.has_suffix(user_data.base_path, "/") \
-				? user_data.base_path \
-				: strings.concatenate({user_data.base_path, "/", user_data.cur_dir, "/"}),
-				fi.name,
-			},
-		),
-	)
-	return os.ERROR_NONE, false
-}
-
-@(private)
 @(require_results)
 _read_dir :: proc(path: string, user_data: ^file_path_list) -> (path_arr: file_path_list) {
+	assert(user_data != nil)
+	assert(os.exists(path))
 	fd, _ := os.open(path)
 	defer os.close(fd)
 	fi, _ := os.read_dir(fd, -1)
-	buf: string = ""
 	for i := 0; i < len(fi); i += 1 {
 		if (fi[i].is_dir) {
 			_ = _read_dir(fi[i].fullpath, user_data)
 		} else {
-			buf = strings.concatenate({fi[i].fullpath})
-			append(&user_data.files, buf)
+			append(&user_data.files, strings.concatenate({fi[i].fullpath}))
 		}
-		fmt.println("file:", user_data.files[:])
 	}
 	user_data.count = cast(u64)len(user_data.files)
+	assert(user_data.count > 0)
 	return user_data^
 }
 
