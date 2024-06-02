@@ -1,12 +1,7 @@
 package termaudio
 
-import "base:runtime"
 import "core:fmt"
-import "core:log"
 import "core:os"
-import "core:reflect"
-import "core:strconv"
-import "core:strings"
 
 logger :: proc(
 	file: string,

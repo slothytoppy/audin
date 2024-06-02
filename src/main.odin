@@ -1,107 +1,105 @@
 package termaudio
-import "./id3"
-import "core:c"
 import "core:fmt"
-import "core:os"
-import "core:path/filepath"
-import "core:strconv"
 import "core:strings"
 import "song_queue"
 import rl "vendor:raylib/"
 
 main :: proc() {
 	rl.SetTraceLogLevel(rl.TraceLogLevel.ERROR)
+	/*
+	fmt.println(
+		"raylib doesnt allow me to properly get the end of the song so i must rewrite my audio lib",
+		"check to make sure that the organization of structures like SongQueue makes sense",
+		"write a gui lib for creating buttons, sliders, and progress bars but im unhappy with how raylibs rgui does this",
+		sep = "\n\n",
+	)
+  */
+	//unimplemented("rewrite my audio library")
 	q := SongQueue {
-		volume  = 0.5,
-		playing = true,
-		muted   = false,
-		looping = true,
+		volume = 0.5,
+		muted  = false,
 	}
 	rl.InitAudioDevice()
 	defer rl.CloseAudioDevice()
-	window_config: rl.ConfigFlags = {rl.ConfigFlag.WINDOW_RESIZABLE}
 	rl.InitWindow(1080, 720, "hello window")
 	defer rl.CloseWindow()
 	font: rl.Font = rl.LoadFont("./fonts/Alegreya-Regular.ttf")
 	defer rl.UnloadFont(font)
-	rl.SetWindowState(window_config)
 	rl.SetTargetFPS(60)
 	q.paths = song_queue.read_dir("./stuff/")
-	q = play_song(q)
+	q = play_song(q.files[q.cursor], q)
 	defer unload_song(q)
+	last_cursor := q.cursor
+	font_size: rl.Vector2
+	song := q.paths.base_path[q.cursor]
+	current_song := strings.clone_to_cstring(song)
+	font_size = rl.MeasureTextEx(font, current_song, f32(font.baseSize), f32(font.glyphPadding))
 	for (!rl.WindowShouldClose()) {
-		rl.UpdateMusicStream(q.music)
 		rl.BeginDrawing()
-		rl.ClearBackground(
-			rl.GetColor(
-				cast(u32)rl.GuiGetStyle(
-					cast(c.int)rl.GuiControl.DEFAULT,
-					cast(c.int)rl.GuiDefaultProperty.TEXT_SPACING,
-				),
-			),
-		)
+		rl.ClearBackground(rl.BLACK)
+		rl.UpdateMusicStream(q.music)
+		center_x := rl.GetScreenWidth() / 2
+		center_y := rl.GetScreenHeight() / 2
+		if (at_music_end(q)) {
+			q = play_next(q)
+		}
 		key := rl.GetKeyPressed()
 		q = handle_keypress(key, q)
-		write_looping(q.looping, rl.Vector2{0, 100})
-		write_volume(q, rl.Vector2{0, 0})
-		// write_volume(q, rl.Vector2{0, 0})
+		if (last_cursor != q.cursor) {
+			song = q.paths.base_path[q.cursor]
+			current_song = strings.clone_to_cstring(song)
+			font_size = rl.MeasureTextEx(
+				font,
+				current_song,
+				f32(font.baseSize),
+				f32(font.glyphPadding),
+			)
+			last_cursor = q.cursor
+		}
+		rl.DrawLineEx(
+			rl.Vector2{0, cast(f32)center_y},
+			rl.Vector2{font_size.x, cast(f32)center_y},
+			1,
+			rl.BLUE,
+		)
+		rl.DrawLineEx(
+			rl.Vector2{0, cast(f32)center_y + font_size.y},
+			rl.Vector2{font_size.x, cast(f32)center_y + font_size.y},
+			1,
+			rl.BLUE,
+		)
+		rl.DrawLineEx(
+			rl.Vector2{0, cast(f32)center_y},
+			rl.Vector2{1, cast(f32)center_y + font_size.y},
+			1,
+			rl.BLUE,
+		)
+		rl.DrawLineEx(
+			rl.Vector2{font_size.x, cast(f32)center_y + font_size.y},
+			rl.Vector2{font_size.x, cast(f32)center_y},
+			1,
+			rl.BLUE,
+		)
 		rl.DrawTextEx(
 			font,
-			strings.clone_to_cstring(q.paths.files[q.cursor]),
-			rl.Vector2{0, 50},
-			cast(f32)font.baseSize,
-			0,
-			rl.GREEN,
+			current_song,
+			rl.Vector2{0, cast(f32)center_y},
+			f32(font.baseSize),
+			f32(font.glyphPadding),
+			rl.RED,
 		)
-		if (at_music_end(q)) {
-			if (q.looping == true) {
-				q = play_song(q)
-			} else {
-				q = play_next(q)
-			}
-		}
-		/*
-		if (key == rl.KeyboardKey.ESCAPE || key == rl.KeyboardKey.Q) {
-			return
-		} else if (rl.IsKeyPressed(.A)) || rl.IsKeyPressedRepeat(.A) {
-			q = play_prev(q)
-		} else if (rl.IsKeyPressed(.D) || rl.IsKeyPressedRepeat(.D)) {
-			q = play_next(q)
-		} else if (rl.IsKeyPressed(.C) || rl.IsKeyPressedRepeat(.C)) {
-			q.volume -= 0.1
-			q.volume = rl.Clamp(q.volume, 0.0, 1.0)
-			rl.SetMasterVolume(q.volume)
-		} else if (rl.IsKeyPressed(.V) || rl.IsKeyPressedRepeat(.V)) {
-			q.volume += 0.1
-			q.volume = rl.Clamp(q.volume, 0.0, 1.0)
-			rl.SetMasterVolume(q.volume)
-		} else if (rl.IsKeyPressed(.P) || rl.IsKeyPressed(.SPACE)) {
-			q.playing = !q.playing
-			if (q.playing == true) {
-				rl.ResumeMusicStream(q.music)
-			} else {
-				rl.PauseMusicStream(q.music)
-			}
-		} else if (rl.IsKeyPressed(.G)) {
-			rl.SeekMusicStream(q.music, rl.GetMusicTimeLength(q.music))
-		} else if (rl.IsKeyPressed(.M)) {
-			q.muted = !q.muted
-			volume := q.muted ? 0 : q.volume
-			rl.SetMasterVolume(volume)
-		} else if (rl.IsKeyPressed(.L)) {
-			q.looping = !q.looping
-		}
-    */
-
 		rl.EndDrawing()
 	}
 }
 
 at_music_end :: proc(q: SongQueue) -> bool {
-	q := q
-	music_length := rl.GetMusicTimeLength(q.music)
-	music_remaining_time := rl.GetMusicTimePlayed(q.music)
-	if (music_remaining_time == music_length) {
+	time_played := rl.GetMusicTimePlayed(q.music) / rl.GetMusicTimeLength(q.music)
+	logger("log", rl.GetMusicTimePlayed(q.music), rl.GetMusicTimeLength(q.music))
+	{
+		assert(rl.GetMusicTimePlayed(q.music) < rl.GetMusicTimeLength(q.music))
+	}
+	if (time_played > 1.0) {
+		fmt.println(true)
 		return true
 	}
 	return false

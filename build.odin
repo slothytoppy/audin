@@ -1,9 +1,7 @@
 package build
 
-import "base:runtime"
 import "core:fmt"
 import "core:os"
-import "core:strings"
 import "core:sys/linux"
 import "core:thread"
 
@@ -19,16 +17,14 @@ _cmd :: proc(t: ^thread.Thread) {
 	if (pid == 0) {
 		os.execvp(args.args[0], args.args[1:])
 	}
-	if (strings.has_prefix(args.args[0], "./")) {
-		status: u32
-		wait_options: linux.Wait_Options = {}
-		linux.waitpid(cast(linux.Pid)pid, &status, wait_options)
-	}
+	status: u32
+	wait_options: linux.Wait_Options = {}
+	linux.waitpid(cast(linux.Pid)pid, &status, wait_options)
 	return
 }
 
 cmd :: proc(args: []string) {
-	threads := make([dynamic]^thread.Thread, 0, 2)
+	threads := make([dynamic]^thread.Thread, 0, 1)
 	defer delete(threads)
 
 	if t := thread.create(_cmd); t != nil {

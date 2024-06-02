@@ -1,15 +1,10 @@
 package song_queue
 
-import "../id3"
-import "core:fmt"
-import "core:mem"
 import "core:os"
-import "core:path/filepath"
 import "core:strings"
-import "core:sys/linux"
 
 file_path_list :: struct {
-	base_path: string,
+	base_path: [dynamic]string,
 	files:     [dynamic]string,
 	count:     u64,
 	cur_dir:   string,
@@ -28,6 +23,7 @@ _read_dir :: proc(path: string, user_data: ^file_path_list) -> (path_arr: file_p
 			_ = _read_dir(fi[i].fullpath, user_data)
 		} else {
 			append(&user_data.files, strings.concatenate({fi[i].fullpath}))
+			append(&user_data.base_path, fi[i].name)
 		}
 	}
 	user_data.count = cast(u64)len(user_data.files)

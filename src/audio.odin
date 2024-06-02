@@ -6,36 +6,42 @@ import "song_queue"
 import rl "vendor:raylib"
 
 SongQueue :: struct {
-	paths:          song_queue.file_path_list,
+	using paths:          song_queue.file_path_list,
 	cursor:         i64,
 	muted, playing: bool,
 	volume:         f32,
 	music:          rl.Music,
-	looping:        bool,
 }
 
-toggle_playing :: proc(q: SongQueue) {
+toggle_playing :: proc(q: SongQueue) -> SongQueue {
 	q := q
 	q.playing = !q.playing
-	if (q.playing == true) {
+	if (q.playing == false) {
 		rl.PauseMusicStream(q.music)
 	} else {
 		rl.ResumeMusicStream(q.music)
 	}
+	return q
 }
 
-toggle_looping :: proc(q: SongQueue) {
+toggle_mute :: proc(q: SongQueue) -> SongQueue {
 	q := q
-	q.looping = !q.looping
+	q.muted = !q.muted
+	if (q.muted) {
+		rl.SetMasterVolume(0)
+	} else {
+		rl.SetMasterVolume(q.volume)
+	}
+	return q
 }
 
 @(require_results)
-play_song :: proc(q: SongQueue) -> SongQueue {
+play_song :: proc(path: string, q: SongQueue) -> SongQueue {
 	q := q
-	assert(os.exists(q.paths.files[q.cursor]), q.paths.files[q.cursor])
-	q.music = rl.LoadMusicStream(strings.clone_to_cstring(q.paths.files[q.cursor]))
+	assert(os.exists(path))
+	q.music = rl.LoadMusicStream(strings.clone_to_cstring(path))
 	rl.PlayMusicStream(q.music)
-	logger("log", "playing:", q.paths.files[q.cursor])
+	logger("log", "playing:", path)
 	return q
 }
 
@@ -46,7 +52,7 @@ play_prev :: proc(q: SongQueue) -> SongQueue {
 	if (q.cursor < 0) {
 		q.cursor = cast(i64)q.paths.count - 1
 	}
-	q = play_song(q)
+	q = play_song(q.paths.files[q.cursor], q)
 	return q
 }
 
@@ -57,7 +63,7 @@ play_next :: proc(q: SongQueue) -> SongQueue {
 	if (q.cursor + 1 > cast(i64)q.paths.count) {
 		q.cursor = 0
 	}
-	q = play_song(q)
+	q = play_song(q.paths.files[q.cursor], q)
 	return q
 }
 
