@@ -1,0 +1,4 @@
+[ ] implement a scrollable song queue i.e. it would show the list of songs in the queue, you can click on a song to play it, it would also show the current song index and the maximum amount of songs for example 0/46 for playing the 0th song with a maximum of 46 
+[ ] make loading fonts not depend on the current working directory 
+[ ] find a way to get the get end of the song. Maybe try having an internal clock that runs while the song is playing and compare that to the length of the song.
+[ ] make song queues able to be appended to

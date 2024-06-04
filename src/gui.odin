@@ -1,5 +1,6 @@
 package termaudio
 
+import "./song_queue"
 import "core:strconv"
 import "core:strings"
 import rl "vendor:raylib"
@@ -56,6 +57,17 @@ handle_keypress :: proc(key: rl.KeyboardKey, queue: SongQueue) -> SongQueue {
 	}
 	if (rl.IsKeyPressed(.P)) {
 		q = toggle_playing(q)
+	}
+	if (rl.IsKeyPressed(.L)) {
+		/*
+		fi := song_queue.read_dir("./extras")
+		rl.TextFormat("hello", q.paths.files)
+		i: u64 = 0
+		for ; i < fi.count; i += 1 {
+			append(&q.paths.base_path, fi.files[i])
+		}
+		q.paths.count = q.paths.count + i
+    */
 	}
 
 	return q
