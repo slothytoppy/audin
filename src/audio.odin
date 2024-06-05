@@ -38,15 +38,17 @@ toggle_mute :: proc(q: SongQueue) -> SongQueue {
 }
 
 @(require_results)
-play_song :: proc(path: string, q: SongQueue) -> SongQueue {
-	q := q
+play_song :: proc(path: string) -> rl.Music {
 	assert(os.exists(path))
+	assert(rl.IsAudioDeviceReady() == true)
 	clone := strings.clone_to_cstring(path)
 	defer delete(clone)
-	q.music = rl.LoadMusicStream(clone)
-	rl.PlayMusicStream(q.music)
+	music := rl.LoadMusicStream(clone)
+	assert(rl.IsMusicReady(music) == true)
+	rl.PlayMusicStream(music)
 	logger("log", "playing:", path)
-	return q
+	assert(rl.IsMusicStreamPlaying(music) == true)
+	return music
 }
 
 /* NOTE: play_prev and play_next ensure that q.cursor 
@@ -54,16 +56,19 @@ play_song :: proc(path: string, q: SongQueue) -> SongQueue {
 @(require_results)
 play_prev :: proc(q: SongQueue) -> SongQueue {
 	q := q
-	q.cursor = q.cursor > 0 ? q.cursor - 1 : q.paths.count - 1
-	q = play_song(q.paths.fullpath[q.cursor], q)
+	len: u64 = song_queue.len(q.paths) - 1
+	q.cursor = q.cursor > 0 ? q.cursor - 1 : len
+	q.music = play_song(q.paths.fullpath[q.cursor])
+	q.playing = true
 	return q
 }
 
 @(require_results)
 play_next :: proc(q: SongQueue) -> SongQueue {
 	q := q
-	q.cursor = q.cursor + 1 < cast(u64)len(q.paths.base_path) ? q.cursor + 1 : 0
-	q = play_song(q.paths.fullpath[q.cursor], q)
+	q.cursor = q.cursor + 1 < song_queue.len(q.paths) ? q.cursor + 1 : 0
+	q.music = play_song(q.paths.fullpath[q.cursor])
+	q.playing = true
 	return q
 }
 

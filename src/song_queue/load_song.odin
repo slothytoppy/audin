@@ -1,13 +1,11 @@
 package song_queue
 
-import "core:fmt"
+import "base:builtin"
 import "core:os"
 import "core:strings"
 
 file_path_list :: struct {
-	base_path: [dynamic]string,
-	fullpath:  [dynamic]string,
-	count:     u64,
+	fullpath: [dynamic]string,
 }
 
 @(private)
@@ -16,21 +14,29 @@ _read_dir :: proc(path: string, user_data: ^file_path_list) -> (path_arr: file_p
 	assert(os.exists(path))
 	fd, _ := os.open(path)
 	defer os.close(fd)
-	fi, _ := os.read_dir(fd, 1)
+	fi, _ := os.read_dir(fd, 0)
 	defer delete(fi)
-	for i in 0 ..< len(fi) {
+	for i in 0 ..< builtin.len(fi) {
 		if (fi[i].is_dir) {
 			_ = _read_dir(fi[i].fullpath, user_data)
 		} else {
 			append(&user_data.fullpath, fi[i].fullpath)
-			append(&user_data.base_path, fi[i].name)
 		}
 	}
-	user_data.count = cast(u64)len(user_data.fullpath)
-	assert(user_data.count > 0)
 	return user_data^
 }
 
 read_dir :: proc(path: string, path_arr: ^file_path_list, recurse: bool = false) {
 	_read_dir(path, path_arr)
+}
+
+len :: proc(q: file_path_list) -> u64 {
+	return cast(u64)builtin.len(q.fullpath)
+}
+
+base_name :: proc(q: file_path_list, idx: u64) -> string {
+	assert(idx <= len(q))
+	path := q.fullpath[idx]
+	i := strings.last_index(path, "/")
+	return path[i + 1:]
 }

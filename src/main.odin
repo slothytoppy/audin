@@ -1,6 +1,7 @@
 package termaudio
 import "core:fmt"
 import "core:mem"
+import "core:os"
 import "core:strconv"
 import "core:strings"
 import "song_queue"
@@ -49,15 +50,15 @@ main :: proc() {
 	rl.InitWindow(1080, 720, "hello window")
 	rl.SetWindowState(flag_bits)
 	defer rl.CloseWindow()
-	font: rl.Font = rl.LoadFont("./fonts/Alegreya-Regular.ttf")
+	font: rl.Font = rl.LoadFont("/home/slothy/gh/audin/fonts/Alegreya-Regular.ttf")
 	defer rl.UnloadFont(font)
 	rl.SetTargetFPS(60)
-	song_queue.read_dir("./stuff/", &q.paths)
-	q = play_song(q.paths.fullpath[q.cursor], q)
+	song_queue.read_dir("/home/slothy/gh/audin/stuff/", &q.paths)
+	q.music = play_song(q.paths.fullpath[0])
 	defer unload_song(q)
 	last_cursor := q.cursor
 	font_size: rl.Vector2
-	song := q.paths.base_path[q.cursor]
+	song := song_queue.base_name(q.paths, q.cursor)
 	current_song := strings.clone_to_cstring(song)
 	font_size = rl.MeasureTextEx(font, current_song, f32(font.baseSize), 0)
 	center_x := rl.GetScreenWidth() / 2
@@ -75,7 +76,7 @@ main :: proc() {
 		key := rl.GetKeyPressed()
 		q = handle_keypress(key, q)
 		if (last_cursor != q.cursor) {
-			song = q.paths.base_path[q.cursor]
+			song = song_queue.base_name(q.paths, q.cursor)
 			current_song = strings.clone_to_cstring(song)
 			font_size = rl.MeasureTextEx(font, current_song, f32(font.baseSize), 0)
 			last_cursor = q.cursor
@@ -90,41 +91,11 @@ main :: proc() {
 				last_cursor,
 			)
 		}
-		rl.DrawLineEx(
-			rl.Vector2{0, cast(f32)center_y},
-			rl.Vector2{font_size.x, cast(f32)center_y},
-			1,
-			rl.BLUE,
-		)
-		rl.DrawLineEx(
-			rl.Vector2{0, cast(f32)center_y + font_size.y},
-			rl.Vector2{font_size.x, cast(f32)center_y + font_size.y},
-			1,
-			rl.BLUE,
-		)
-		rl.DrawLineEx(
-			rl.Vector2{0, cast(f32)center_y},
-			rl.Vector2{1, cast(f32)center_y + font_size.y},
-			1,
-			rl.BLUE,
-		)
-		rl.DrawLineEx(
-			rl.Vector2{font_size.x, cast(f32)center_y + font_size.y},
-			rl.Vector2{font_size.x, cast(f32)center_y},
-			1,
-			rl.BLUE,
-		)
-		rl.DrawTextEx(
-			font,
-			current_song,
-			rl.Vector2{0, cast(f32)center_y},
-			f32(font.baseSize),
-			0,
-			rl.RED,
-		)
+
+		/*
 		buf: [8]byte
 		rl.DrawText(
-			strings.clone_to_cstring(strconv.itoa(buf[:], len(q.paths.base_path))),
+			strings.clone_to_cstring(strconv.itoa(buf[:], cast(int)song_queue.len(q.paths))),
 			center_x,
 			center_y,
 			cast(i32)font_size.y,
@@ -137,6 +108,14 @@ main :: proc() {
 			cast(i32)font_size.y,
 			rl.GREEN,
 		)
+    */
+		textbox_color: textbox_color = {
+			box  = rl.BLUE,
+			text = rl.RED,
+		}
+		draw_int(pos{center_x, center_y}, song_queue.len(q.paths), font, rl.GREEN)
+		draw_int(pos{center_x, center_y + 16}, q.cursor, font, rl.GREEN)
+		textbox(song, pos{y = center_y}, font, 0, textbox_color)
 		rl.EndDrawing()
 	}
 }

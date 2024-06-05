@@ -1,6 +1,8 @@
 package termaudio
 
 import "./song_queue"
+import "base:intrinsics"
+import "core:fmt"
 import "core:strconv"
 import "core:strings"
 import rl "vendor:raylib"
@@ -104,4 +106,46 @@ make_button :: proc(
 		}
 	}
 	return state
+}
+
+pos :: struct {
+	x, y: i32,
+}
+
+textbox_color :: struct {
+	box, text: rl.Color,
+}
+
+textbox :: proc(
+	data: string,
+	pos: pos,
+	font: rl.Font,
+	padding: u64 = 0,
+	textbox_color: textbox_color,
+) {
+	msg := strings.clone_to_cstring(data)
+	tb := textbox_color
+	defer delete(msg)
+	spacing: f32 = 0
+	sz := rl.MeasureTextEx(font, msg, cast(f32)font.baseSize, spacing)
+	width: i32 = cast(i32)sz.x + cast(i32)padding
+	rl.DrawRectangleLines(pos.x, pos.y, width + 5, cast(i32)sz.y, tb.box)
+	rl.DrawTextEx(font, msg, rl.Vector2{cast(f32)pos.x, cast(f32)pos.y}, sz.y, spacing, tb.text)
+}
+
+draw_int :: proc(
+	pos: pos,
+	data: $T,
+	font: rl.Font,
+	color: rl.Color,
+) where intrinsics.type_is_numeric(T) {
+	buf: [8]byte
+	text: string = strconv.itoa(buf[:], cast(int)data)
+	if (data < 10) {
+		text = strings.concatenate({"0", text})
+	}
+	msg: cstring = strings.clone_to_cstring(text)
+	sz := rl.MeasureTextEx(font, msg, cast(f32)font.baseSize, 0)
+	height := sz.y
+	rl.DrawTextEx(font, msg, rl.Vector2{cast(f32)pos.x, cast(f32)pos.y}, height, 0, color)
 }
