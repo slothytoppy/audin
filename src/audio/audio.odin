@@ -1,14 +1,11 @@
-package termaudio
+package audio
 
-import "core:fmt"
-import "core:math"
 import "core:os"
 import "core:strings"
-import "song_queue"
 import rl "vendor:raylib"
 
 SongQueue :: struct {
-	paths:          song_queue.file_path_list,
+	paths:          file_path_list,
 	cursor:         u64,
 	muted, playing: bool,
 	volume:         f32,
@@ -46,7 +43,6 @@ play_song :: proc(path: string) -> rl.Music {
 	music := rl.LoadMusicStream(clone)
 	assert(rl.IsMusicReady(music) == true)
 	rl.PlayMusicStream(music)
-	logger("log", "playing:", path)
 	assert(rl.IsMusicStreamPlaying(music) == true)
 	return music
 }
@@ -56,7 +52,7 @@ play_song :: proc(path: string) -> rl.Music {
 @(require_results)
 play_prev :: proc(q: SongQueue) -> SongQueue {
 	q := q
-	len: u64 = song_queue.len(q.paths) - 1
+	len: u64 = len(q.paths) - 1
 	q.cursor = q.cursor > 0 ? q.cursor - 1 : len
 	q.music = play_song(q.paths.fullpath[q.cursor])
 	q.playing = true
@@ -66,7 +62,7 @@ play_prev :: proc(q: SongQueue) -> SongQueue {
 @(require_results)
 play_next :: proc(q: SongQueue) -> SongQueue {
 	q := q
-	q.cursor = q.cursor + 1 < song_queue.len(q.paths) ? q.cursor + 1 : 0
+	q.cursor = q.cursor + 1 < len(q.paths) ? q.cursor + 1 : 0
 	q.music = play_song(q.paths.fullpath[q.cursor])
 	q.playing = true
 	return q

@@ -1,8 +1,10 @@
-package song_queue
+package audio
 
 import "base:builtin"
+import "core:fmt"
 import "core:os"
 import "core:strings"
+import "core:testing"
 
 file_path_list :: struct {
 	fullpath: [dynamic]string,

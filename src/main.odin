@@ -1,10 +1,9 @@
 package termaudio
+import "audio"
 import "core:fmt"
-import "core:mem"
-import "core:os"
-import "core:strconv"
 import "core:strings"
-import "song_queue"
+import "gui"
+import "log"
 import rl "vendor:raylib/"
 
 main :: proc() {
@@ -30,16 +29,8 @@ main :: proc() {
 			}
 		}
 	}
-	/*
-	fmt.println(
-		"raylib doesnt allow me to properly get the end of the song so i must rewrite my audio lib",
-		"check to make sure that the organization of structures like SongQueue makes sense",
-		"write a gui lib for creating buttons, sliders, and progress bars but im unhappy with how raylibs rgui does this",
-		sep = "\n\n",
-	)
-  */
 	rl.SetTraceLogLevel(rl.TraceLogLevel.ERROR)
-	q := SongQueue {
+	q := audio.SongQueue {
 		volume = 0.5,
 		muted  = false,
 	}
@@ -53,69 +44,54 @@ main :: proc() {
 	font: rl.Font = rl.LoadFont("/home/slothy/gh/audin/fonts/Alegreya-Regular.ttf")
 	defer rl.UnloadFont(font)
 	rl.SetTargetFPS(60)
-	song_queue.read_dir("/home/slothy/gh/audin/stuff/", &q.paths)
-	q.music = play_song(q.paths.fullpath[0])
-	defer unload_song(q)
+
+	audio.read_dir("/home/slothy/gh/audin/stuff/", &q.paths)
+	q.music = audio.play_song(q.paths.fullpath[0])
+	defer audio.unload_song(q)
 	last_cursor := q.cursor
 	font_size: rl.Vector2
-	song := song_queue.base_name(q.paths, q.cursor)
+	song := audio.base_name(q.paths, q.cursor)
 	current_song := strings.clone_to_cstring(song)
+
 	font_size = rl.MeasureTextEx(font, current_song, f32(font.baseSize), 0)
 	center_x := rl.GetScreenWidth() / 2
 	center_y := rl.GetScreenHeight() / 2
-	logger("log", "x:", center_x, "y:", center_y)
+	log.logger("log", "x:", center_x, "y:", center_y)
+	gui.set_font(font)
+
+	gui.window_state.fullscreen = false
+	fmt.println("max_len", audio.get_queue_max_len(q.paths))
 	for (!rl.WindowShouldClose()) {
 		rl.BeginDrawing()
+		defer rl.EndDrawing()
 		rl.ClearBackground(rl.BLACK)
 		rl.UpdateMusicStream(q.music)
 		if (rl.IsWindowResized()) {
 			center_x = rl.GetScreenWidth() / 2
 			center_y = rl.GetScreenHeight() / 2
-			logger("log", "x:", center_x, "y:", center_y)
+			log.logger("log", "x:", center_x, "y:", center_y)
 		}
 		key := rl.GetKeyPressed()
-		q = handle_keypress(key, q)
+		q = gui.handle_keypress(key, q)
 		if (last_cursor != q.cursor) {
-			song = song_queue.base_name(q.paths, q.cursor)
+			song = audio.base_name(q.paths, q.cursor)
 			current_song = strings.clone_to_cstring(song)
 			font_size = rl.MeasureTextEx(font, current_song, f32(font.baseSize), 0)
 			last_cursor = q.cursor
-			logger(
-				"log",
-				"song:",
-				song,
-				"font size:",
-				font_size.x,
-				font_size.y,
-				"last cursor",
-				last_cursor,
-			)
+			log.logger("log", "font size:", font_size.x, font_size.y, "last cursor", last_cursor)
 		}
 
-		/*
-		buf: [8]byte
-		rl.DrawText(
-			strings.clone_to_cstring(strconv.itoa(buf[:], cast(int)song_queue.len(q.paths))),
-			center_x,
-			center_y,
-			cast(i32)font_size.y,
-			rl.GREEN,
-		)
-		rl.DrawText(
-			strings.clone_to_cstring(strconv.itoa(buf[:], cast(int)q.cursor + 1)),
-			center_x + cast(i32)font_size.y,
-			center_y + cast(i32)font_size.y,
-			cast(i32)font_size.y,
-			rl.GREEN,
-		)
-    */
-		textbox_color: textbox_color = {
+		textbox_color: gui.textbox_color = {
 			box  = rl.BLUE,
 			text = rl.RED,
 		}
-		draw_int(pos{center_x, center_y}, song_queue.len(q.paths), font, rl.GREEN)
-		draw_int(pos{center_x, center_y + 16}, q.cursor, font, rl.GREEN)
-		textbox(song, pos{y = center_y}, font, 0, textbox_color)
-		rl.EndDrawing()
+		gui.textbox(
+			song,
+			gui.pos{center_x - (cast(i32)font_size.x / 2), center_y},
+			audio.get_queue_max_len(q.paths),
+			textbox_color,
+		)
+		gui.draw_float(q.volume, gui.pos{center_x * 2 - cast(i32)font_size.y, center_y}, rl.GREEN)
+		gui.draw_int(q.cursor, gui.pos{0, center_y + cast(i32)font_size.y}, rl.GRAY)
 	}
 }
