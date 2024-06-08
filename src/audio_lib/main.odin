@@ -90,8 +90,8 @@ load_file :: proc(q: ^Audio, file: string) {
 		ma.result.SUCCESS,
 	)
 	q.device.pUserData = cast(rawptr)&q.decoder
-	q.ready = true
 	ma.decoder_get_length_in_pcm_frames(&q.decoder, &q.frames_count)
+	q.ready = true
 }
 
 reset_decoder :: proc(q: ^Audio) {
@@ -138,6 +138,17 @@ draw_int :: proc(data: $T, pos: pos, color: rl.Color) where intrinsics.type_is_n
 	delete(msg)
 }
 
+draw_float :: proc(data: $T, pos: pos, color: rl.Color) where intrinsics.type_is_float(T) {
+	buf: [8]byte
+	text: string = strconv.ftoa(buf[:], cast(f64)data, 'f', 1, 64)
+	text = text[1:]
+	msg: cstring = strings.clone_to_cstring(text)
+	sz := rl.MeasureTextEx(curr_font, msg, cast(f32)curr_font.baseSize, 0)
+	height := sz.y
+	rl.DrawTextEx(curr_font, msg, rl.Vector2{cast(f32)pos.x, cast(f32)pos.y}, height, 0, color)
+	delete(msg)
+}
+
 main :: proc() {
 	rl.InitWindow(400, 800, "ur mom")
 	cfg: rl.ConfigFlags = {rl.ConfigFlag.WINDOW_RESIZABLE, rl.ConfigFlag.WINDOW_ALWAYS_RUN}
@@ -154,23 +165,35 @@ main :: proc() {
 	font_height := rl.MeasureTextEx(curr_font, " ", 32, 0)
 	fmt.println(font_height.y)
 	sample_rate := AUDIO.device.sampleRate
+	buf: [8]byte
 	for {
 		rl.BeginDrawing()
 		rl.ClearBackground(rl.BLACK)
-		draw_int(AUDIO.frames_read / cast(u64)sample_rate, pos{0, 0}, rl.GREEN)
+		seconds_remaining_msg := strings.clone_to_cstring(
+			strconv.ftoa(buf[:], cast(f64)AUDIO.frames_read / cast(f64)sample_rate, 'f', 1, 64),
+		)
+		seconds_played_msg := strings.clone_to_cstring(
+			strconv.ftoa(buf[:], cast(f64)AUDIO.frames_count / cast(f64)sample_rate, 'f', 1, 64),
+		)
+		defer delete(seconds_remaining_msg)
+		defer delete(seconds_played_msg)
+		draw_float(cast(f64)AUDIO.frames_read / cast(f64)sample_rate, pos{0, 0}, rl.GREEN)
 		rl.DrawTextEx(
 			curr_font,
 			"/",
-			rl.Vector2{0, font_height.y},
+			rl.Vector2 {
+				rl.MeasureTextEx(curr_font, seconds_remaining_msg, cast(f32)curr_font.baseSize, 0).x,
+				0,
+			},
 			cast(f32)curr_font.baseSize,
 			0,
 			rl.BLUE,
 		)
-		draw_int(
-			AUDIO.frames_count / cast(u64)sample_rate,
-			pos{0, cast(i32)font_height.y * 2},
-			rl.GREEN,
-		)
+		pos: pos = {
+			x = cast(i32)rl.MeasureTextEx(curr_font, seconds_played_msg, cast(f32)curr_font.baseSize, 0).x,
+			y = 0,
+		}
+		draw_float(cast(f64)AUDIO.frames_count / cast(f64)sample_rate, pos, rl.GREEN)
 		key := rl.GetKeyPressed()
 		if (key == .Q) {
 			rl.CloseWindow()
@@ -186,6 +209,7 @@ main :: proc() {
 		if (audio_at_end(AUDIO) == true) {
 			AUDIO.song_queue.cursor += 1
 			load_file(&AUDIO, AUDIO.song_queue.data[AUDIO.song_queue.cursor])
+			reset_decoder(&AUDIO)
 			fmt.println("play next song!")
 		}
 		rl.EndDrawing()
